@@ -23,6 +23,8 @@ fun NowPlayingScreen(
     track: Track,
     isPlaying: Boolean,
     currentPositionMs: Long,
+    durationMs: Long? = null,
+    isBuffering: Boolean = false,
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
@@ -34,8 +36,8 @@ fun NowPlayingScreen(
     var isShuffle by remember { mutableStateOf(false) }
     var isRepeat by remember { mutableStateOf(false) }
 
-    val duration = track.durationMs ?: 200000L
-    val progress = (currentPositionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    val effectiveDuration = if (durationMs != null && durationMs > 0L) durationMs else (track.durationMs ?: 200000L)
+    val progress = (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
 
     Column(
         modifier = modifier
@@ -123,7 +125,7 @@ fun NowPlayingScreen(
         Slider(
             value = progress,
             onValueChange = { newProgress ->
-                onSeekTo((newProgress * duration).toLong())
+                onSeekTo((newProgress * effectiveDuration).toLong())
             },
             colors = SliderDefaults.colors(
                 thumbColor = AccentPrimary,
@@ -178,12 +180,20 @@ fun NowPlayingScreen(
                 contentAlignment = Alignment.Center
             ) {
                 IconButton(onClick = onPlayPauseClick, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = DarkBackground,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    if (isBuffering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(36.dp),
+                            strokeWidth = 3.dp,
+                            color = DarkBackground
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = DarkBackground,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
             }
 

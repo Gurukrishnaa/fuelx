@@ -23,6 +23,7 @@ import com.fuelx.ui.theme.*
 fun MiniPlayer(
     currentTrack: Track,
     isPlaying: Boolean,
+    isBuffering: Boolean = false,
     onPlayPauseClick: () -> Unit,
     onNextClick: () -> Unit,
     onMiniPlayerClick: () -> Unit,
@@ -78,13 +79,21 @@ fun MiniPlayer(
                 )
             }
 
-            // Play / Pause button
+            // Play / Pause / Buffering button
             IconButton(onClick = onPlayPauseClick) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = TextPrimary
-                )
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = AccentPrimary
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = TextPrimary
+                    )
+                }
             }
 
             // Next button

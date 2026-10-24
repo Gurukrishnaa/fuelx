@@ -7,38 +7,43 @@ object MockTracks {
     val sampleTracks = listOf(
         Track(
             id = "track_1",
-            title = "Midnight City Lights",
+            title = "Dethroned (Chillwave)",
             artist = "Aura Bloom",
             album = "Neon Horizons",
-            durationMs = 214000L
+            durationMs = 214000L,
+            streamUri = "https://storage.googleapis.com/exoplayer-test-media-1/mp3/dethroned.mp3"
         ),
         Track(
             id = "track_2",
-            title = "Velvet Dreams",
-            artist = "Echo Theory",
+            title = "Tears of Steel Soundtrack",
+            artist = "Jorma Kaukonen",
             album = "Subliminal",
-            durationMs = 186000L
+            durationMs = 186000L,
+            streamUri = "https://storage.googleapis.com/exoplayer-test-media-1/mp3/tears-of-steel-soundtrack.mp3"
         ),
         Track(
             id = "track_3",
-            title = "Cybernetic Pulse",
-            artist = "Kavinsky Waves",
+            title = "Big Buck Bunny Acoustic",
+            artist = "Jan Morgenstern",
             album = "Future Retro",
-            durationMs = 245000L
+            durationMs = 245000L,
+            streamUri = "https://storage.googleapis.com/exoplayer-test-media-1/mp3/bbb_audio.mp3"
         ),
         Track(
             id = "track_4",
-            title = "Silent Drift",
-            artist = "Solaris",
-            album = "Deep Space",
-            durationMs = 198000L
+            title = "SoundHelix Melody One",
+            artist = "SoundHelix",
+            album = "Electro Harmonies",
+            durationMs = 372000L,
+            streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
         ),
         Track(
             id = "track_5",
-            title = "Afterglow Horizon",
-            artist = "Krono & Nova",
-            album = "Euphoria",
-            durationMs = 230000L
+            title = "SoundHelix Melody Two",
+            artist = "SoundHelix",
+            album = "Synth Explorations",
+            durationMs = 423000L,
+            streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
         )
     )
 

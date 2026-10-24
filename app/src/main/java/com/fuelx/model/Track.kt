@@ -6,7 +6,8 @@ data class Track(
     val artist: String,
     val album: String? = null,
     val artworkUrl: String? = null,
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    val streamUri: String? = null
 ) {
     val formattedDuration: String
         get() {

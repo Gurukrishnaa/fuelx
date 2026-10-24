@@ -10,16 +10,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fuelx.data.MockTracks
-import com.fuelx.model.Track
+import com.fuelx.playback.PlayerController
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
 import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
-import kotlinx.coroutines.delay
 
 enum class ScreenTab {
     HOME, SEARCH, LIBRARY
@@ -27,32 +27,32 @@ enum class ScreenTab {
 
 @Composable
 fun FuelXApp() {
+    val context = LocalContext.current
+    val playerController = remember { PlayerController(context) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            playerController.release()
+        }
+    }
+
     var selectedTab by remember { mutableStateOf(ScreenTab.HOME) }
     val tracks = remember { MockTracks.sampleTracks }
     val lyrics = remember { MockTracks.sampleLyrics }
 
-    var currentTrack by remember { mutableStateOf<Track?>(tracks.firstOrNull()) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var currentPositionMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(tracks) {
+        playerController.setPlaylist(tracks)
+    }
+
+    // Real audio player states from AndroidX Media3
+    val currentTrack by playerController.currentTrack.collectAsState()
+    val isPlaying by playerController.isPlaying.collectAsState()
+    val currentPositionMs by playerController.currentPositionMs.collectAsState()
+    val durationMs by playerController.durationMs.collectAsState()
+    val isBuffering by playerController.isBuffering.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
     var isLyricsOpen by remember { mutableStateOf(false) }
-
-    // Position ticker simulation for Milestone 1 preview
-    LaunchedEffect(isPlaying, currentTrack) {
-        while (isPlaying) {
-            delay(500)
-            val duration = currentTrack?.durationMs ?: 200000L
-            if (currentPositionMs + 500 >= duration) {
-                // Next track
-                val nextIndex = ((tracks.indexOf(currentTrack) + 1) % tracks.size)
-                currentTrack = tracks[nextIndex]
-                currentPositionMs = 0L
-            } else {
-                currentPositionMs += 500
-            }
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -67,12 +67,9 @@ fun FuelXApp() {
                         MiniPlayer(
                             currentTrack = track,
                             isPlaying = isPlaying,
-                            onPlayPauseClick = { isPlaying = !isPlaying },
-                            onNextClick = {
-                                val nextIndex = ((tracks.indexOf(track) + 1) % tracks.size)
-                                currentTrack = tracks[nextIndex]
-                                currentPositionMs = 0L
-                            },
+                            isBuffering = isBuffering,
+                            onPlayPauseClick = { playerController.togglePlayPause() },
+                            onNextClick = { playerController.skipNext() },
                             onMiniPlayerClick = { isNowPlayingOpen = true }
                         )
                     }
@@ -138,9 +135,7 @@ fun FuelXApp() {
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
                             onTrackSelect = { track ->
-                                currentTrack = track
-                                currentPositionMs = 0L
-                                isPlaying = true
+                                playerController.playTrack(track, tracks)
                             }
                         )
                     }
@@ -149,9 +144,7 @@ fun FuelXApp() {
                             allTracks = tracks,
                             currentTrack = currentTrack,
                             onTrackSelect = { track ->
-                                currentTrack = track
-                                currentPositionMs = 0L
-                                isPlaying = true
+                                playerController.playTrack(track, tracks)
                             }
                         )
                     }
@@ -188,18 +181,12 @@ fun FuelXApp() {
                 track = currentTrack!!,
                 isPlaying = isPlaying,
                 currentPositionMs = currentPositionMs,
-                onPlayPauseClick = { isPlaying = !isPlaying },
-                onPreviousClick = {
-                    val prevIndex = (tracks.indexOf(currentTrack) - 1 + tracks.size) % tracks.size
-                    currentTrack = tracks[prevIndex]
-                    currentPositionMs = 0L
-                },
-                onNextClick = {
-                    val nextIndex = (tracks.indexOf(currentTrack) + 1) % tracks.size
-                    currentTrack = tracks[nextIndex]
-                    currentPositionMs = 0L
-                },
-                onSeekTo = { newPos -> currentPositionMs = newPos },
+                durationMs = durationMs,
+                isBuffering = isBuffering,
+                onPlayPauseClick = { playerController.togglePlayPause() },
+                onPreviousClick = { playerController.skipPrevious() },
+                onNextClick = { playerController.skipNext() },
+                onSeekTo = { newPos -> playerController.seekTo(newPos) },
                 onOpenLyrics = { isLyricsOpen = true },
                 onClose = { isNowPlayingOpen = false }
             )
@@ -212,7 +199,7 @@ fun FuelXApp() {
                 lyrics = lyrics,
                 currentPositionMs = currentPositionMs,
                 onSeekTo = { targetMs ->
-                    currentPositionMs = targetMs
+                    playerController.seekTo(targetMs)
                 },
                 onClose = { isLyricsOpen = false }
             )
