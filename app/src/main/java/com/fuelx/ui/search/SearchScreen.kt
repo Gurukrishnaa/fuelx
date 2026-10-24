@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -29,6 +30,7 @@ fun SearchScreen(
     repository: MusicRepository,
     currentTrack: Track?,
     onTrackSelect: (Track, List<Track>) -> Unit,
+    onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -68,14 +70,29 @@ fun SearchScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(16.dp)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = "Search",
-            style = MaterialTheme.typography.headlineLarge,
-            color = AccentPrimary,
-            modifier = Modifier.padding(vertical = 12.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Back to Home",
+                    tint = TextPrimary
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "Search",
+                style = MaterialTheme.typography.headlineLarge,
+                color = AccentPrimary
+            )
+        }
 
         // Search Bar Input
         OutlinedTextField(

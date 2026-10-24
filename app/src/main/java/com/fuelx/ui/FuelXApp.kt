@@ -1,8 +1,10 @@
 package com.fuelx.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Search
@@ -12,8 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.fuelx.data.DefaultLyricsRepository
 import com.fuelx.data.DefaultMusicRepository
-import com.fuelx.data.MockTracks
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
 import com.fuelx.ui.components.MiniPlayer
@@ -22,6 +24,7 @@ import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
+import com.fuelx.util.ParsedLyrics
 
 enum class ScreenTab {
     HOME, SEARCH, LIBRARY
@@ -31,6 +34,7 @@ enum class ScreenTab {
 fun FuelXApp() {
     val context = LocalContext.current
     val repository = remember { DefaultMusicRepository() }
+    val lyricsRepository = remember { DefaultLyricsRepository() }
     val playerController = remember { PlayerController(context, repository) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -46,7 +50,36 @@ fun FuelXApp() {
     var trendingError by remember { mutableStateOf<String?>(null) }
     var retryCount by remember { mutableIntStateOf(0) }
 
-    val lyrics = remember { MockTracks.sampleLyrics }
+    // Real audio player states from AndroidX Media3
+    val currentTrack by playerController.currentTrack.collectAsState()
+    val isPlaying by playerController.isPlaying.collectAsState()
+    val currentPositionMs by playerController.currentPositionMs.collectAsState()
+    val durationMs by playerController.durationMs.collectAsState()
+    val isBuffering by playerController.isBuffering.collectAsState()
+    val playbackError by playerController.playbackError.collectAsState()
+
+    var isNowPlayingOpen by remember { mutableStateOf(false) }
+    var isLyricsOpen by remember { mutableStateOf(false) }
+
+    // Lyrics State
+    var parsedLyrics by remember { mutableStateOf<ParsedLyrics?>(null) }
+    var isLyricsLoading by remember { mutableStateOf(false) }
+    var lyricsError by remember { mutableStateOf<String?>(null) }
+    var lyricsRetryCount by remember { mutableIntStateOf(0) }
+
+    // Intercept phone's System Back button:
+    // 1. If on Lyrics page -> close Lyrics to return to player
+    // 2. If on NowPlaying page -> collapse player to return to browsing
+    // 3. If on Search or Library tab -> return to Home tab
+    BackHandler(enabled = isLyricsOpen) {
+        isLyricsOpen = false
+    }
+    BackHandler(enabled = !isLyricsOpen && isNowPlayingOpen) {
+        isNowPlayingOpen = false
+    }
+    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedTab != ScreenTab.HOME) {
+        selectedTab = ScreenTab.HOME
+    }
 
     // Fetch initial trending tracks via repository
     LaunchedEffect(retryCount) {
@@ -63,16 +96,25 @@ fun FuelXApp() {
         }
     }
 
-    // Real audio player states from AndroidX Media3
-    val currentTrack by playerController.currentTrack.collectAsState()
-    val isPlaying by playerController.isPlaying.collectAsState()
-    val currentPositionMs by playerController.currentPositionMs.collectAsState()
-    val durationMs by playerController.durationMs.collectAsState()
-    val isBuffering by playerController.isBuffering.collectAsState()
-    val playbackError by playerController.playbackError.collectAsState()
-
-    var isNowPlayingOpen by remember { mutableStateOf(false) }
-    var isLyricsOpen by remember { mutableStateOf(false) }
+    // Load synchronized lyrics whenever current track changes
+    LaunchedEffect(currentTrack?.id, lyricsRetryCount) {
+        val track = currentTrack
+        if (track == null) {
+            parsedLyrics = null
+            isLyricsLoading = false
+            lyricsError = null
+        } else {
+            isLyricsLoading = true
+            lyricsError = null
+            val result = lyricsRepository.getLyrics(track)
+            isLyricsLoading = false
+            if (result.isSuccess) {
+                parsedLyrics = result.getOrNull()
+            } else {
+                lyricsError = result.exceptionOrNull()?.message ?: "Unable to fetch lyrics"
+            }
+        }
+    }
 
     // Display error snackbar if playback or stream resolution fails
     LaunchedEffect(playbackError) {
@@ -181,29 +223,58 @@ fun FuelXApp() {
                             currentTrack = currentTrack,
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
-                            }
+                            },
+                            onBackClick = { selectedTab = ScreenTab.HOME }
                         )
                     }
                     ScreenTab.LIBRARY -> {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(DarkBackground)
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
+                                .statusBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { selectedTab = ScreenTab.HOME }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                        contentDescription = "Back to Home",
+                                        tint = TextPrimary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Your Library",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    text = "Library",
+                                    style = MaterialTheme.typography.headlineLarge,
                                     color = AccentPrimary
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Favorites & History will appear here in Milestone 5",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextMuted
-                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "Your Library",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = AccentPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Favorites & History will appear here in Milestone 5",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextMuted
+                                    )
+                                }
                             }
                         }
                     }
@@ -232,11 +303,14 @@ fun FuelXApp() {
         if (isLyricsOpen && currentTrack != null) {
             LyricsScreen(
                 track = currentTrack!!,
-                lyrics = lyrics,
+                parsedLyrics = parsedLyrics,
+                isLoading = isLyricsLoading,
+                errorMessage = lyricsError,
                 currentPositionMs = currentPositionMs,
                 onSeekTo = { targetMs ->
                     playerController.seekTo(targetMs)
                 },
+                onRetry = { lyricsRetryCount++ },
                 onClose = { isLyricsOpen = false }
             )
         }

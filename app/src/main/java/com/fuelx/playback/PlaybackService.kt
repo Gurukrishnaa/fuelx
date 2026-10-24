@@ -4,11 +4,12 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.fuelx.MainActivity
+import com.fuelx.data.PlaybackPreferences
+import com.fuelx.model.Track
 
 class PlaybackService : MediaSessionService() {
 
@@ -47,12 +48,28 @@ class PlaybackService : MediaSessionService() {
         return mediaSession
     }
 
-    // Called when the user dismisses the app from recent tasks
+    // Called when the user clears/swipes the app from the recent screen
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0 || player.playbackState == Player.STATE_ENDED) {
-            stopSelf()
+        if (player != null) {
+            val currentItem = player.currentMediaItem
+            if (currentItem != null) {
+                val currentPosition = player.currentPosition
+                val track = Track(
+                    id = currentItem.mediaId,
+                    title = currentItem.mediaMetadata.title?.toString() ?: "",
+                    artist = currentItem.mediaMetadata.artist?.toString() ?: "",
+                    album = currentItem.mediaMetadata.albumTitle?.toString(),
+                    durationMs = player.duration.takeIf { it > 0 },
+                    streamUri = currentItem.localConfiguration?.uri?.toString()
+                )
+                // Save the exact track and position for restoration
+                PlaybackPreferences(this).saveLastPlayback(track, currentPosition)
+            }
+            player.pause()
         }
+        // Stop foreground service, remove notification, and kill playback state
+        stopSelf()
     }
 
     override fun onDestroy() {

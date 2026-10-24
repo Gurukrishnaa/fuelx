@@ -87,8 +87,9 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
+            .statusBarsPadding()
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 90.dp)
     ) {
         item {
             // Header

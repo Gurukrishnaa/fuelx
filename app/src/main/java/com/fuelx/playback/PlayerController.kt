@@ -10,6 +10,8 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.MusicRepository
+import com.fuelx.data.PlaybackPreferences
+import com.fuelx.data.SavedPlaybackState
 import com.fuelx.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,7 @@ class PlayerController(
     private val repository: MusicRepository = DefaultMusicRepository()
 ) {
 
+    private val preferences = PlaybackPreferences(context)
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var controller: MediaController? = null
     private var positionJob: Job? = null
@@ -46,6 +49,14 @@ class PlayerController(
     private var playlist: List<Track> = emptyList()
 
     init {
+        // Restore last known state from storage into UI immediately
+        val saved = preferences.getLastPlayback()
+        if (saved != null) {
+            _currentTrack.value = saved.toTrack()
+            _currentPositionMs.value = saved.positionMs
+            _durationMs.value = (saved.durationMs ?: 0L).coerceAtLeast(0L)
+        }
+
         connectToService()
     }
 
@@ -62,6 +73,13 @@ class PlayerController(
                     val mediaController = controllerFuture.get()
                     controller = mediaController
                     setupPlayerListener(mediaController)
+
+                    // If player is idle and has no items, restore the saved track in paused state
+                    if (mediaController.mediaItemCount == 0 && playlist.isNotEmpty()) {
+                        preferences.getLastPlayback()?.let { saved ->
+                            restoreSavedState(saved, playlist)
+                        }
+                    }
                 } catch (e: Exception) {
                     _playbackError.value = "Failed to connect to audio service"
                     e.printStackTrace()
@@ -79,6 +97,8 @@ class PlayerController(
                     startPositionUpdates()
                 } else {
                     stopPositionUpdates()
+                    // Persist exact position on pause
+                    preferences.savePositionOnly(player.currentPosition)
                 }
             }
 
@@ -94,6 +114,7 @@ class PlayerController(
                 val matched = playlist.find { it.id == mediaId }
                 if (matched != null) {
                     _currentTrack.value = matched
+                    preferences.saveLastPlayback(matched, 0L)
                 }
                 _currentPositionMs.value = 0L
                 _durationMs.value = player.duration.coerceAtLeast(0L)
@@ -108,6 +129,42 @@ class PlayerController(
 
     fun setPlaylist(tracks: List<Track>) {
         this.playlist = tracks
+        val current = _currentTrack.value
+        if (current == null) {
+            preferences.getLastPlayback()?.let { saved ->
+                restoreSavedState(saved, tracks)
+            }
+        }
+    }
+
+    fun restoreSavedState(saved: SavedPlaybackState, tracks: List<Track> = playlist) {
+        this.playlist = tracks
+        val matchedTrack = tracks.find { it.id == saved.trackId } ?: saved.toTrack()
+        _currentTrack.value = matchedTrack
+        _currentPositionMs.value = saved.positionMs
+        _durationMs.value = (matchedTrack.durationMs ?: 0L).coerceAtLeast(0L)
+        _isPlaying.value = false
+
+        val player = controller ?: return
+
+        val mediaItems = tracks.map { t ->
+            val metadata = MediaMetadata.Builder()
+                .setTitle(t.title)
+                .setArtist(t.artist)
+                .setAlbumTitle(t.album)
+                .build()
+
+            MediaItem.Builder()
+                .setMediaId(t.id)
+                .setUri(t.streamUri)
+                .setMediaMetadata(metadata)
+                .build()
+        }
+
+        val startIndex = tracks.indexOfFirst { it.id == matchedTrack.id }.coerceAtLeast(0)
+        player.setMediaItems(mediaItems, startIndex, saved.positionMs)
+        player.prepare()
+        player.pause() // Stays paused at exact saved point
     }
 
     fun playTrack(track: Track, tracks: List<Track> = playlist) {
@@ -116,11 +173,12 @@ class PlayerController(
         _isBuffering.value = true
         _playbackError.value = null
 
+        preferences.saveLastPlayback(track, 0L)
+
         scope.launch {
             val streamUri = if (track.streamUri != null) {
                 track.streamUri
             } else {
-                // Dynamically resolve stream from provider repository
                 val result = repository.resolveStream(track.id)
                 if (result.isSuccess) {
                     result.getOrNull()?.uri?.toString()
@@ -138,7 +196,6 @@ class PlayerController(
                 return@launch
             }
 
-            // Build list of MediaItems with proper metadata for notification & lock screen
             val mediaItems = tracks.map { t ->
                 val uri = if (t.id == track.id) streamUri else t.streamUri
 
@@ -167,6 +224,7 @@ class PlayerController(
         val player = controller ?: return
         if (player.isPlaying) {
             player.pause()
+            preferences.savePositionOnly(player.currentPosition)
         } else {
             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                 player.prepare()
@@ -179,6 +237,7 @@ class PlayerController(
         val player = controller ?: return
         player.seekTo(positionMs)
         _currentPositionMs.value = positionMs
+        preferences.savePositionOnly(positionMs)
     }
 
     fun skipNext() {
@@ -206,9 +265,16 @@ class PlayerController(
     private fun startPositionUpdates() {
         positionJob?.cancel()
         positionJob = scope.launch {
+            var counter = 0
             while (isActive) {
                 controller?.let {
-                    _currentPositionMs.value = it.currentPosition
+                    val pos = it.currentPosition
+                    _currentPositionMs.value = pos
+                    counter++
+                    // Persist position every 3 seconds while playing
+                    if (counter % 10 == 0) {
+                        preferences.savePositionOnly(pos)
+                    }
                 }
                 delay(300)
             }
@@ -219,7 +285,9 @@ class PlayerController(
         positionJob?.cancel()
         positionJob = null
         controller?.let {
-            _currentPositionMs.value = it.currentPosition
+            val pos = it.currentPosition
+            _currentPositionMs.value = pos
+            preferences.savePositionOnly(pos)
         }
     }
 
