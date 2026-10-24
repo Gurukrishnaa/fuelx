@@ -8,13 +8,18 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.fuelx.data.DefaultMusicRepository
+import com.fuelx.data.MusicRepository
 import com.fuelx.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class PlayerController(private val context: Context) {
+class PlayerController(
+    private val context: Context,
+    private val repository: MusicRepository = DefaultMusicRepository()
+) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var controller: MediaController? = null
@@ -34,6 +39,9 @@ class PlayerController(private val context: Context) {
 
     private val _isBuffering = MutableStateFlow(false)
     val isBuffering: StateFlow<Boolean> = _isBuffering.asStateFlow()
+
+    private val _playbackError = MutableStateFlow<String?>(null)
+    val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
 
     private var playlist: List<Track> = emptyList()
 
@@ -55,6 +63,7 @@ class PlayerController(private val context: Context) {
                     controller = mediaController
                     setupPlayerListener(mediaController)
                 } catch (e: Exception) {
+                    _playbackError.value = "Failed to connect to audio service"
                     e.printStackTrace()
                 }
             },
@@ -91,7 +100,6 @@ class PlayerController(private val context: Context) {
             }
         })
 
-        // Sync initial state if service was already running
         _isPlaying.value = player.isPlaying
         if (player.isPlaying) {
             startPositionUpdates()
@@ -105,29 +113,54 @@ class PlayerController(private val context: Context) {
     fun playTrack(track: Track, tracks: List<Track> = playlist) {
         this.playlist = tracks
         _currentTrack.value = track
+        _isBuffering.value = true
+        _playbackError.value = null
 
-        val player = controller ?: return
+        scope.launch {
+            val streamUri = if (track.streamUri != null) {
+                track.streamUri
+            } else {
+                // Dynamically resolve stream from provider repository
+                val result = repository.resolveStream(track.id)
+                if (result.isSuccess) {
+                    result.getOrNull()?.uri?.toString()
+                } else {
+                    _isBuffering.value = false
+                    _playbackError.value = "Unable to resolve stream: ${result.exceptionOrNull()?.message}"
+                    return@launch
+                }
+            }
 
-        // Build list of MediaItems with proper metadata for notification & lock screen
-        val mediaItems = tracks.map { t ->
-            val metadata = MediaMetadata.Builder()
-                .setTitle(t.title)
-                .setArtist(t.artist)
-                .setAlbumTitle(t.album)
-                .build()
+            val player = controller
+            if (player == null) {
+                _isBuffering.value = false
+                _playbackError.value = "Audio player not ready"
+                return@launch
+            }
 
-            MediaItem.Builder()
-                .setMediaId(t.id)
-                .setUri(t.streamUri)
-                .setMediaMetadata(metadata)
-                .build()
+            // Build list of MediaItems with proper metadata for notification & lock screen
+            val mediaItems = tracks.map { t ->
+                val uri = if (t.id == track.id) streamUri else t.streamUri
+
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(t.title)
+                    .setArtist(t.artist)
+                    .setAlbumTitle(t.album)
+                    .build()
+
+                MediaItem.Builder()
+                    .setMediaId(t.id)
+                    .setUri(uri)
+                    .setMediaMetadata(metadata)
+                    .build()
+            }
+
+            val startIndex = tracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+
+            player.setMediaItems(mediaItems, startIndex, /* startPositionMs = */ 0L)
+            player.prepare()
+            player.play()
         }
-
-        val startIndex = tracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
-
-        player.setMediaItems(mediaItems, startIndex, /* startPositionMs = */ 0L)
-        player.prepare()
-        player.play()
     }
 
     fun togglePlayPause() {
@@ -153,7 +186,6 @@ class PlayerController(private val context: Context) {
         if (player.hasNextMediaItem()) {
             player.seekToNextMediaItem()
         } else {
-            // Loop back to start of playlist
             player.seekTo(0, 0L)
         }
     }
@@ -161,11 +193,14 @@ class PlayerController(private val context: Context) {
     fun skipPrevious() {
         val player = controller ?: return
         if (player.currentPosition > 3000L) {
-            // If more than 3 seconds in, restart the track
             player.seekTo(0L)
         } else if (player.hasPreviousMediaItem()) {
             player.seekToPreviousMediaItem()
         }
+    }
+
+    fun clearError() {
+        _playbackError.value = null
     }
 
     private fun startPositionUpdates() {

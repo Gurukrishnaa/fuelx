@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,9 +28,61 @@ fun HomeScreen(
     tracks: List<Track>,
     currentTrack: Track?,
     isPlaying: Boolean,
-    onTrackSelect: (Track) -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
+    onRetry: () -> Unit = {},
+    onTrackSelect: (Track, List<Track>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (isLoading) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DarkBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = AccentPrimary, strokeWidth = 3.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = "Loading music...", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            }
+        }
+        return
+    }
+
+    if (errorMessage != null) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DarkBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.WarningAmber,
+                    contentDescription = "Error",
+                    tint = AccentSecondary,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = errorMessage, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Retry")
+                }
+            }
+        }
+        return
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -76,7 +130,7 @@ fun HomeScreen(
                     RecentTrackCard(
                         track = track,
                         isSelected = track.id == currentTrack?.id,
-                        onClick = { onTrackSelect(track) }
+                        onClick = { onTrackSelect(track, tracks) }
                     )
                 }
             }
@@ -85,7 +139,7 @@ fun HomeScreen(
         // All Tracks header
         item {
             Text(
-                text = "Tracks",
+                text = "Featured Catalog",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
             )
@@ -98,7 +152,7 @@ fun HomeScreen(
                 track = track,
                 isCurrent = isCurrent,
                 isPlaying = isCurrent && isPlaying,
-                onClick = { onTrackSelect(track) }
+                onClick = { onTrackSelect(track, tracks) }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }

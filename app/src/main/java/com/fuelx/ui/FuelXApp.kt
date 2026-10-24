@@ -12,7 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.MockTracks
+import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
@@ -28,7 +30,9 @@ enum class ScreenTab {
 @Composable
 fun FuelXApp() {
     val context = LocalContext.current
-    val playerController = remember { PlayerController(context) }
+    val repository = remember { DefaultMusicRepository() }
+    val playerController = remember { PlayerController(context, repository) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -37,11 +41,26 @@ fun FuelXApp() {
     }
 
     var selectedTab by remember { mutableStateOf(ScreenTab.HOME) }
-    val tracks = remember { MockTracks.sampleTracks }
+    var trendingTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var isTrendingLoading by remember { mutableStateOf(true) }
+    var trendingError by remember { mutableStateOf<String?>(null) }
+    var retryCount by remember { mutableIntStateOf(0) }
+
     val lyrics = remember { MockTracks.sampleLyrics }
 
-    LaunchedEffect(tracks) {
-        playerController.setPlaylist(tracks)
+    // Fetch initial trending tracks via repository
+    LaunchedEffect(retryCount) {
+        isTrendingLoading = true
+        trendingError = null
+        val result = repository.getTrending()
+        isTrendingLoading = false
+        if (result.isSuccess) {
+            val list = result.getOrDefault(emptyList())
+            trendingTracks = list
+            playerController.setPlaylist(list)
+        } else {
+            trendingError = result.exceptionOrNull()?.message ?: "Failed to load music"
+        }
     }
 
     // Real audio player states from AndroidX Media3
@@ -50,9 +69,22 @@ fun FuelXApp() {
     val currentPositionMs by playerController.currentPositionMs.collectAsState()
     val durationMs by playerController.durationMs.collectAsState()
     val isBuffering by playerController.isBuffering.collectAsState()
+    val playbackError by playerController.playbackError.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
     var isLyricsOpen by remember { mutableStateOf(false) }
+
+    // Display error snackbar if playback or stream resolution fails
+    LaunchedEffect(playbackError) {
+        playbackError?.let { msg ->
+            snackbarHostState.showSnackbar(
+                message = msg,
+                withDismissAction = true,
+                duration = SnackbarDuration.Short
+            )
+            playerController.clearError()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -60,6 +92,7 @@ fun FuelXApp() {
             .background(DarkBackground)
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 Column {
                     // Mini Player (Only visible when not full screen)
@@ -131,20 +164,23 @@ fun FuelXApp() {
                 when (selectedTab) {
                     ScreenTab.HOME -> {
                         HomeScreen(
-                            tracks = tracks,
+                            tracks = trendingTracks,
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
-                            onTrackSelect = { track ->
-                                playerController.playTrack(track, tracks)
+                            isLoading = isTrendingLoading,
+                            errorMessage = trendingError,
+                            onRetry = { retryCount++ },
+                            onTrackSelect = { track, list ->
+                                playerController.playTrack(track, list)
                             }
                         )
                     }
                     ScreenTab.SEARCH -> {
                         SearchScreen(
-                            allTracks = tracks,
+                            repository = repository,
                             currentTrack = currentTrack,
-                            onTrackSelect = { track ->
-                                playerController.playTrack(track, tracks)
+                            onTrackSelect = { track, list ->
+                                playerController.playTrack(track, list)
                             }
                         )
                     }
