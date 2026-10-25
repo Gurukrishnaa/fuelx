@@ -14,17 +14,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.fuelx.data.DefaultLibraryRepository
 import com.fuelx.data.DefaultLyricsRepository
 import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
+import com.fuelx.ui.library.LibraryScreen
 import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
 import com.fuelx.util.ParsedLyrics
+import kotlinx.coroutines.launch
 
 enum class ScreenTab {
     HOME, SEARCH, LIBRARY
@@ -35,8 +38,19 @@ fun FuelXApp() {
     val context = LocalContext.current
     val repository = remember { DefaultMusicRepository() }
     val lyricsRepository = remember { DefaultLyricsRepository() }
-    val playerController = remember { PlayerController(context, repository) }
+    val libraryRepository = remember { DefaultLibraryRepository.getInstance(context) }
+    val playerController = remember { PlayerController(context, repository, libraryRepository) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val favorites by libraryRepository.favorites.collectAsState()
+    val history by libraryRepository.history.collectAsState()
+
+    val onToggleFavorite: (Track) -> Unit = { track ->
+        coroutineScope.launch {
+            libraryRepository.toggleFavorite(track)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -209,6 +223,9 @@ fun FuelXApp() {
                             tracks = trendingTracks,
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
+                            recentlyPlayed = history,
+                            isFavorite = { id -> favorites.any { it.id == id } },
+                            onToggleFavorite = onToggleFavorite,
                             isLoading = isTrendingLoading,
                             errorMessage = trendingError,
                             onRetry = { retryCount++ },
@@ -221,6 +238,8 @@ fun FuelXApp() {
                         SearchScreen(
                             repository = repository,
                             currentTrack = currentTrack,
+                            isFavorite = { id -> favorites.any { it.id == id } },
+                            onToggleFavorite = onToggleFavorite,
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
                             },
@@ -228,55 +247,23 @@ fun FuelXApp() {
                         )
                     }
                     ScreenTab.LIBRARY -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(DarkBackground)
-                                .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { selectedTab = ScreenTab.HOME }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                        contentDescription = "Back to Home",
-                                        tint = TextPrimary
-                                    )
+                        LibraryScreen(
+                            favorites = favorites,
+                            history = history,
+                            currentTrack = currentTrack,
+                            isPlaying = isPlaying,
+                            isFavorite = { id -> favorites.any { it.id == id } },
+                            onToggleFavorite = onToggleFavorite,
+                            onClearHistory = {
+                                coroutineScope.launch {
+                                    libraryRepository.clearHistory()
                                 }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Library",
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    color = AccentPrimary
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "Your Library",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = AccentPrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = "Favorites & History will appear here in Milestone 5",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = TextMuted
-                                    )
-                                }
-                            }
-                        }
+                            },
+                            onTrackSelect = { track, list ->
+                                playerController.playTrack(track, list)
+                            },
+                            onBackClick = { selectedTab = ScreenTab.HOME }
+                        )
                     }
                 }
             }
@@ -290,6 +277,10 @@ fun FuelXApp() {
                 currentPositionMs = currentPositionMs,
                 durationMs = durationMs,
                 isBuffering = isBuffering,
+                isFavorite = favorites.any { it.id == currentTrack?.id },
+                onToggleFavorite = {
+                    currentTrack?.let { onToggleFavorite(it) }
+                },
                 onPlayPauseClick = { playerController.togglePlayPause() },
                 onPreviousClick = { playerController.skipPrevious() },
                 onNextClick = { playerController.skipNext() },

@@ -8,10 +8,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +25,9 @@ fun HomeScreen(
     tracks: List<Track>,
     currentTrack: Track?,
     isPlaying: Boolean,
+    recentlyPlayed: List<Track> = emptyList(),
+    isFavorite: (String) -> Boolean = { false },
+    onToggleFavorite: (Track) -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null,
     onRetry: () -> Unit = {},
@@ -83,6 +83,9 @@ fun HomeScreen(
         return
     }
 
+    val displayRecent = if (recentlyPlayed.isNotEmpty()) recentlyPlayed.take(8) else tracks.take(4)
+    val recentTitle = if (recentlyPlayed.isNotEmpty()) "Recently Played" else "Quick Picks"
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -118,7 +121,7 @@ fun HomeScreen(
         // Quick Picks / Recent row
         item {
             Text(
-                text = "Recently Played",
+                text = recentTitle,
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -127,11 +130,11 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
-                items(tracks.take(4)) { track ->
+                items(displayRecent) { track ->
                     RecentTrackCard(
                         track = track,
                         isSelected = track.id == currentTrack?.id,
-                        onClick = { onTrackSelect(track, tracks) }
+                        onClick = { onTrackSelect(track, displayRecent) }
                     )
                 }
             }
@@ -153,6 +156,8 @@ fun HomeScreen(
                 track = track,
                 isCurrent = isCurrent,
                 isPlaying = isCurrent && isPlaying,
+                isFav = isFavorite(track.id),
+                onToggleFav = { onToggleFavorite(track) },
                 onClick = { onTrackSelect(track, tracks) }
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -212,6 +217,8 @@ private fun TrackListItem(
     track: Track,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    isFav: Boolean,
+    onToggleFav: () -> Unit,
     onClick: () -> Unit
 ) {
     Card(
@@ -271,10 +278,26 @@ private fun TrackListItem(
                 )
             }
 
+            // Duration
             Text(
                 text = track.formattedDuration,
-                style = MaterialTheme.typography.labelSmall
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
+
+            // Heart / Favorite button
+            IconButton(
+                onClick = onToggleFav,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (isFav) "Remove favorite" else "Add favorite",
+                    tint = if (isFav) AccentPrimary else TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

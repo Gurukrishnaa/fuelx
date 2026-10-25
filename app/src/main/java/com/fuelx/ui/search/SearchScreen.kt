@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -29,6 +31,8 @@ import kotlinx.coroutines.delay
 fun SearchScreen(
     repository: MusicRepository,
     currentTrack: Track?,
+    isFavorite: (String) -> Boolean = { false },
+    onToggleFavorite: (Track) -> Unit = {},
     onTrackSelect: (Track, List<Track>) -> Unit,
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -258,8 +262,23 @@ fun SearchScreen(
 
                                 Text(
                                     text = track.formattedDuration,
-                                    style = MaterialTheme.typography.labelSmall
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
                                 )
+
+                                IconButton(
+                                    onClick = { onToggleFavorite(track) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    val fav = isFavorite(track.id)
+                                    Icon(
+                                        imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                        contentDescription = if (fav) "Remove favorite" else "Add favorite",
+                                        tint = if (fav) AccentPrimary else TextMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }

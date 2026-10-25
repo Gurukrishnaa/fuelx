@@ -12,6 +12,8 @@ import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.MusicRepository
 import com.fuelx.data.PlaybackPreferences
 import com.fuelx.data.SavedPlaybackState
+import com.fuelx.data.DefaultLibraryRepository
+import com.fuelx.data.LibraryRepository
 import com.fuelx.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class PlayerController(
     private val context: Context,
-    private val repository: MusicRepository = DefaultMusicRepository()
+    private val repository: MusicRepository = DefaultMusicRepository(),
+    private val libraryRepository: LibraryRepository = DefaultLibraryRepository.getInstance(context)
 ) {
 
     private val preferences = PlaybackPreferences(context)
@@ -115,6 +118,9 @@ class PlayerController(
                 if (matched != null) {
                     _currentTrack.value = matched
                     preferences.saveLastPlayback(matched, 0L)
+                    scope.launch {
+                        libraryRepository.recordHistory(matched)
+                    }
                 }
                 _currentPositionMs.value = 0L
                 _durationMs.value = player.duration.coerceAtLeast(0L)
@@ -174,6 +180,9 @@ class PlayerController(
         _playbackError.value = null
 
         preferences.saveLastPlayback(track, 0L)
+        scope.launch {
+            libraryRepository.recordHistory(track)
+        }
 
         scope.launch {
             val streamUri = if (track.streamUri != null) {

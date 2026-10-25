@@ -26,6 +26,8 @@ fun NowPlayingScreen(
     currentPositionMs: Long,
     durationMs: Long? = null,
     isBuffering: Boolean = false,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
@@ -101,24 +103,41 @@ fun NowPlayingScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Title & Artist
-        Column(
+        // Title & Artist with Favorite Button
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.Start
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodyLarge.copy(color = TextSecondary),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = track.artist,
+                    style = MaterialTheme.typography.bodyLarge.copy(color = TextSecondary),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) AccentPrimary else TextSecondary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
