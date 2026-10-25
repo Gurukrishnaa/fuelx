@@ -1,44 +1,58 @@
 package com.fuelx.data
 
+import com.fuelx.data.lyrics.LrclibClient
 import com.fuelx.model.Track
 import com.fuelx.util.LrcParser
 import com.fuelx.util.ParsedLyrics
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 interface LyricsRepository {
     suspend fun getLyrics(track: Track): Result<ParsedLyrics>
 }
 
-class DefaultLyricsRepository : LyricsRepository {
+class DefaultLyricsRepository(
+    private val lrclibClient: LrclibClient = LrclibClient()
+) : LyricsRepository {
 
     private val lyricsCache = LinkedHashMap<String, ParsedLyrics>(30, 0.75f, true)
 
     override suspend fun getLyrics(track: Track): Result<ParsedLyrics> = withContext(Dispatchers.IO) {
-        // Return from cache immediately if present
+        // 1. Return from in-memory cache immediately if present
         synchronized(lyricsCache) {
             lyricsCache[track.id]?.let { return@withContext Result.success(it) }
         }
 
         try {
-            // Simulated network latency
-            delay(150)
-
-            val rawLrc = MockTracks.lrcCatalog[track.id]
-            val parsed = LrcParser.parse(rawLrc)
-
-            synchronized(lyricsCache) {
-                if (lyricsCache.size >= 50) {
-                    val oldestKey = lyricsCache.keys.first()
-                    lyricsCache.remove(oldestKey)
-                }
-                lyricsCache[track.id] = parsed
+            // 2. Check local mock catalog first if present
+            val rawMockLrc = MockTracks.lrcCatalog[track.id]
+            if (!rawMockLrc.isNullOrBlank()) {
+                val parsed = LrcParser.parse(rawMockLrc)
+                cacheLyrics(track.id, parsed)
+                return@withContext Result.success(parsed)
             }
 
-            Result.success(parsed)
+            // 3. Query LRCLIB online lyrics database
+            val lrclibResult = lrclibClient.fetchLyrics(track)
+            if (lrclibResult.isSuccess) {
+                val parsed = lrclibResult.getOrThrow()
+                cacheLyrics(track.id, parsed)
+                return@withContext Result.success(parsed)
+            }
+
+            Result.failure(NoSuchElementException("No lyrics found for \"${track.title}\""))
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun cacheLyrics(trackId: String, parsed: ParsedLyrics) {
+        synchronized(lyricsCache) {
+            if (lyricsCache.size >= 50) {
+                val oldestKey = lyricsCache.keys.first()
+                lyricsCache.remove(oldestKey)
+            }
+            lyricsCache[trackId] = parsed
         }
     }
 }
