@@ -24,15 +24,7 @@ class DefaultLyricsRepository(
         }
 
         try {
-            // 2. Check local mock catalog first if present
-            val rawMockLrc = MockTracks.lrcCatalog[track.id]
-            if (!rawMockLrc.isNullOrBlank()) {
-                val parsed = LrcParser.parse(rawMockLrc)
-                cacheLyrics(track.id, parsed)
-                return@withContext Result.success(parsed)
-            }
-
-            // 3. Query LRCLIB online lyrics database
+            // 2. Query LRCLIB online lyrics database
             val lrclibResult = lrclibClient.fetchLyrics(track)
             if (lrclibResult.isSuccess) {
                 val parsed = lrclibResult.getOrThrow()

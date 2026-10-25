@@ -43,8 +43,16 @@ fun NowPlayingScreen(
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
 
-    val effectiveDuration = if (durationMs != null && durationMs > 0L) durationMs else (track.durationMs ?: 200000L)
-    val progress = (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    val effectiveDuration = when {
+        durationMs != null && durationMs > 0L -> durationMs
+        track.durationMs != null && track.durationMs > 0L -> track.durationMs
+        else -> 0L
+    }
+    val progress = if (effectiveDuration > 0L) {
+        (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
     val sliderValue = if (isDragging) dragProgress else progress
 
     Column(
@@ -169,8 +177,16 @@ fun NowPlayingScreen(
             val displayMs = if (isDragging) (dragProgress * effectiveDuration).toLong() else currentPositionMs
             val currSeconds = (displayMs / 1000).coerceAtLeast(0L)
             val currText = "${currSeconds / 60}:${(currSeconds % 60).toString().padStart(2, '0')}"
+
+            val totalText = if (effectiveDuration > 0L) {
+                val totalSeconds = (effectiveDuration / 1000).coerceAtLeast(0L)
+                "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"
+            } else {
+                "--:--"
+            }
+
             Text(text = currText, style = MaterialTheme.typography.labelSmall)
-            Text(text = track.formattedDuration, style = MaterialTheme.typography.labelSmall)
+            Text(text = totalText, style = MaterialTheme.typography.labelSmall)
         }
 
         Spacer(modifier = Modifier.height(16.dp))

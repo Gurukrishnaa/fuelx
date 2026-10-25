@@ -65,8 +65,7 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
 
     fun insertFavorite(track: Track, addedAtMs: Long = System.currentTimeMillis()): Boolean {
         val db = writableDatabase
-        val artwork = if (!track.artworkUrl.isNullOrBlank()) track.artworkUrl
-            else MockTracks.sampleTracks.find { it.id == track.id }?.artworkUrl
+        val artwork = track.artworkUrl
 
         val values = ContentValues().apply {
             put(COL_TRACK_ID, track.id)
@@ -117,9 +116,7 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             while (it.moveToNext()) {
                 val trackId = it.getString(idIdx)
                 val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
-                val rawArtwork = it.getString(artworkIdx)
-                val artwork = if (!rawArtwork.isNullOrBlank()) rawArtwork
-                    else MockTracks.sampleTracks.find { t -> t.id == trackId }?.artworkUrl
+                val artwork = it.getString(artworkIdx)
 
                 list.add(
                     Track(
@@ -217,9 +214,7 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             while (it.moveToNext()) {
                 val trackId = it.getString(idIdx)
                 val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
-                val rawArtwork = it.getString(artworkIdx)
-                val artwork = if (!rawArtwork.isNullOrBlank()) rawArtwork
-                    else MockTracks.sampleTracks.find { t -> t.id == trackId }?.artworkUrl
+                val artwork = it.getString(artworkIdx)
 
                 list.add(
                     Track(

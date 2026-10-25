@@ -112,10 +112,21 @@ class PlayerController(
                 }
             }
 
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                val dur = player.duration
+                if (dur > 0L && dur != androidx.media3.common.C.TIME_UNSET) {
+                    _durationMs.value = dur
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _isBuffering.value = (playbackState == Player.STATE_BUFFERING)
-                if (playbackState == Player.STATE_READY) {
-                    _durationMs.value = player.duration.coerceAtLeast(0L)
+                val dur = player.duration
+                if (dur > 0L && dur != androidx.media3.common.C.TIME_UNSET) {
+                    _durationMs.value = dur
+                }
+                if (playbackState == Player.STATE_ENDED) {
+                    skipNext()
                 }
             }
 
@@ -193,17 +204,24 @@ class PlayerController(
         }
 
         scope.launch {
-            val streamUri = if (track.streamUri != null) {
-                track.streamUri
+            val streamInfo = if (track.streamUri != null) {
+                null
             } else {
                 val result = repository.resolveStream(track.id)
                 if (result.isSuccess) {
-                    result.getOrNull()?.uri?.toString()
+                    result.getOrNull()
                 } else {
                     _isBuffering.value = false
                     _playbackError.value = "Unable to resolve stream: ${result.exceptionOrNull()?.message}"
                     return@launch
                 }
+            }
+
+            val streamUri = track.streamUri ?: streamInfo?.uri?.toString()
+            if (streamInfo?.durationMs != null && streamInfo.durationMs > 0L) {
+                _durationMs.value = streamInfo.durationMs
+                val updatedTrack = track.copy(durationMs = streamInfo.durationMs)
+                _currentTrack.value = updatedTrack
             }
 
             val player = controller
@@ -213,26 +231,20 @@ class PlayerController(
                 return@launch
             }
 
-            val mediaItems = tracks.map { t ->
-                val uri = if (t.id == track.id) streamUri else t.streamUri
+            val metadata = MediaMetadata.Builder()
+                .setTitle(track.title)
+                .setArtist(track.artist)
+                .setAlbumTitle(track.album)
+                .setArtworkUri(if (!track.artworkUrl.isNullOrBlank()) Uri.parse(track.artworkUrl) else null)
+                .build()
 
-                val metadata = MediaMetadata.Builder()
-                    .setTitle(t.title)
-                    .setArtist(t.artist)
-                    .setAlbumTitle(t.album)
-                    .setArtworkUri(if (!t.artworkUrl.isNullOrBlank()) Uri.parse(t.artworkUrl) else null)
-                    .build()
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(track.id)
+                .setUri(streamUri)
+                .setMediaMetadata(metadata)
+                .build()
 
-                MediaItem.Builder()
-                    .setMediaId(t.id)
-                    .setUri(uri)
-                    .setMediaMetadata(metadata)
-                    .build()
-            }
-
-            val startIndex = tracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
-
-            player.setMediaItems(mediaItems, startIndex, /* startPositionMs = */ 0L)
+            player.setMediaItem(mediaItem, /* startPositionMs = */ 0L)
             player.prepare()
             player.play()
         }
@@ -259,21 +271,32 @@ class PlayerController(
     }
 
     fun skipNext() {
-        val player = controller ?: return
-        if (player.hasNextMediaItem()) {
-            player.seekToNextMediaItem()
+        if (playlist.isEmpty()) return
+        val current = _currentTrack.value
+        val currentIndex = playlist.indexOfFirst { it.id == current?.id }
+        val nextIndex = if (currentIndex != -1 && currentIndex < playlist.size - 1) {
+            currentIndex + 1
         } else {
-            player.seekTo(0, 0L)
+            0
         }
+        playTrack(playlist[nextIndex], playlist)
     }
 
     fun skipPrevious() {
-        val player = controller ?: return
-        if (player.currentPosition > 3000L) {
-            player.seekTo(0L)
-        } else if (player.hasPreviousMediaItem()) {
-            player.seekToPreviousMediaItem()
+        val player = controller
+        if (player != null && player.currentPosition > 3000L) {
+            seekTo(0L)
+            return
         }
+        if (playlist.isEmpty()) return
+        val current = _currentTrack.value
+        val currentIndex = playlist.indexOfFirst { it.id == current?.id }
+        val prevIndex = if (currentIndex > 0) {
+            currentIndex - 1
+        } else {
+            playlist.size - 1
+        }
+        playTrack(playlist[prevIndex], playlist)
     }
 
     fun clearError() {
@@ -312,6 +335,10 @@ class PlayerController(
                 controller?.let { player ->
                     if (player.isPlaying) {
                         _currentPositionMs.value = player.currentPosition
+                        val dur = player.duration
+                        if (dur > 0L && dur != androidx.media3.common.C.TIME_UNSET && _durationMs.value != dur) {
+                            _durationMs.value = dur
+                        }
                         counter++
                         if (counter % 12 == 0) {
                             preferences.savePositionOnly(player.currentPosition)

@@ -5,6 +5,8 @@ import com.fuelx.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import com.fuelx.data.youtube.YouTubeMusicProvider
+
 interface MusicRepository {
     suspend fun getTrending(): Result<List<Track>>
     suspend fun search(query: String): Result<List<Track>>
@@ -12,7 +14,7 @@ interface MusicRepository {
 }
 
 class DefaultMusicRepository(
-    private val provider: MusicProvider = DemoMusicProvider()
+    private val provider: MusicProvider = YouTubeMusicProvider()
 ) : MusicRepository {
 
     // Simple bounded in-memory cache for search results
