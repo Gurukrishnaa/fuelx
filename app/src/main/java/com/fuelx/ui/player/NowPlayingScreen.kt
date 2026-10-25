@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.model.Track
+import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 
 @Composable
@@ -87,19 +88,14 @@ fun NowPlayingScreen(
         Spacer(modifier = Modifier.weight(0.5f))
 
         // Large Album Art Box
-        Box(
-            modifier = Modifier
-                .size(280.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(AccentSecondary.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "♪",
-                color = AccentPrimary,
-                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 72.sp)
-            )
-        }
+        TrackArtwork(
+            artworkUrl = track.artworkUrl,
+            contentDescription = "${track.title} artwork",
+            modifier = Modifier.size(280.dp),
+            shape = RoundedCornerShape(24.dp),
+            placeholderColor = AccentSecondary.copy(alpha = 0.2f),
+            placeholderText = "♪"
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
 

@@ -10,7 +10,8 @@ data class SavedPlaybackState(
     val artist: String,
     val album: String?,
     val durationMs: Long?,
-    val streamUri: String?
+    val streamUri: String?,
+    val artworkUrl: String? = null
 ) {
     fun toTrack(): Track {
         return Track(
@@ -19,6 +20,7 @@ data class SavedPlaybackState(
             artist = artist,
             album = album,
             durationMs = durationMs,
+            artworkUrl = artworkUrl,
             streamUri = streamUri
         )
     }
@@ -37,6 +39,7 @@ class PlaybackPreferences(context: Context) {
             .putString(KEY_ALBUM, track.album)
             .putLong(KEY_DURATION_MS, track.durationMs ?: 0L)
             .putString(KEY_STREAM_URI, track.streamUri)
+            .putString(KEY_ARTWORK_URL, track.artworkUrl)
             .apply()
     }
 
@@ -52,6 +55,7 @@ class PlaybackPreferences(context: Context) {
         val album = prefs.getString(KEY_ALBUM, null)
         val durationMs = prefs.getLong(KEY_DURATION_MS, 0L).takeIf { it > 0 }
         val streamUri = prefs.getString(KEY_STREAM_URI, null)
+        val artworkUrl = prefs.getString(KEY_ARTWORK_URL, null)
 
         return SavedPlaybackState(
             trackId = trackId,
@@ -60,7 +64,8 @@ class PlaybackPreferences(context: Context) {
             artist = artist,
             album = album,
             durationMs = durationMs,
-            streamUri = streamUri
+            streamUri = streamUri,
+            artworkUrl = artworkUrl
         )
     }
 
@@ -72,5 +77,6 @@ class PlaybackPreferences(context: Context) {
         private const val KEY_ALBUM = "last_album"
         private const val KEY_DURATION_MS = "last_duration_ms"
         private const val KEY_STREAM_URI = "last_stream_uri"
+        private const val KEY_ARTWORK_URL = "last_artwork_url"
     }
 }

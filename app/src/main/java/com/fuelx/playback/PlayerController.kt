@@ -14,6 +14,13 @@ import com.fuelx.data.PlaybackPreferences
 import com.fuelx.data.SavedPlaybackState
 import com.fuelx.data.DefaultLibraryRepository
 import com.fuelx.data.LibraryRepository
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
+import coil.Coil
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import java.io.ByteArrayOutputStream
 import com.fuelx.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,6 +128,19 @@ class PlayerController(
                     scope.launch {
                         libraryRepository.recordHistory(matched)
                     }
+                    scope.launch {
+                        val bytes = loadArtworkBytes(matched.artworkUrl)
+                        if (bytes != null && controller?.currentMediaItem?.mediaId == matched.id) {
+                            val current = controller?.currentMediaItem ?: return@launch
+                            val updatedMetadata = current.mediaMetadata.buildUpon()
+                                .setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                                .build()
+                            val updatedItem = current.buildUpon()
+                                .setMediaMetadata(updatedMetadata)
+                                .build()
+                            controller?.replaceMediaItem(controller?.currentMediaItemIndex ?: 0, updatedItem)
+                        }
+                    }
                 }
                 _currentPositionMs.value = 0L
                 _durationMs.value = player.duration.coerceAtLeast(0L)
@@ -158,6 +178,7 @@ class PlayerController(
                 .setTitle(t.title)
                 .setArtist(t.artist)
                 .setAlbumTitle(t.album)
+                .setArtworkUri(if (!t.artworkUrl.isNullOrBlank()) Uri.parse(t.artworkUrl) else null)
                 .build()
 
             MediaItem.Builder()
@@ -205,6 +226,10 @@ class PlayerController(
                 return@launch
             }
 
+            // Pre-load artwork bitmap bytes for current track so notification card
+            // dynamically blends notification colors and sets large artwork cover
+            val artworkBytes = loadArtworkBytes(track.artworkUrl)
+
             val mediaItems = tracks.map { t ->
                 val uri = if (t.id == track.id) streamUri else t.streamUri
 
@@ -212,6 +237,12 @@ class PlayerController(
                     .setTitle(t.title)
                     .setArtist(t.artist)
                     .setAlbumTitle(t.album)
+                    .setArtworkUri(if (!t.artworkUrl.isNullOrBlank()) Uri.parse(t.artworkUrl) else null)
+                    .apply {
+                        if (t.id == track.id && artworkBytes != null) {
+                            setArtworkData(artworkBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                        }
+                    }
                     .build()
 
                 MediaItem.Builder()
@@ -269,6 +300,30 @@ class PlayerController(
 
     fun clearError() {
         _playbackError.value = null
+    }
+
+    private suspend fun loadArtworkBytes(url: String?): ByteArray? = withContext(Dispatchers.IO) {
+        if (url.isNullOrBlank()) return@withContext null
+        try {
+            val loader = Coil.imageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(url)
+                .allowHardware(false)
+                .size(512, 512)
+                .build()
+            val result = loader.execute(request)
+            if (result is SuccessResult) {
+                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                if (bitmap != null) {
+                    val stream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                    return@withContext stream.toByteArray()
+                }
+            }
+            null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun startPositionUpdates() {

@@ -11,6 +11,7 @@ object MockTracks {
             artist = "Aura Bloom",
             album = "Neon Horizons",
             durationMs = 372000L,
+            artworkUrl = "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80",
             streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
         ),
         Track(
@@ -19,6 +20,7 @@ object MockTracks {
             artist = "Jorma Kaukonen",
             album = "Subliminal",
             durationMs = 423000L,
+            artworkUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
             streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
         ),
         Track(
@@ -27,6 +29,7 @@ object MockTracks {
             artist = "Jan Morgenstern",
             album = "Future Retro",
             durationMs = 356000L,
+            artworkUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
             streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
         ),
         Track(
@@ -35,6 +38,7 @@ object MockTracks {
             artist = "SoundHelix",
             album = "Electro Harmonies",
             durationMs = 502000L,
+            artworkUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
             streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
         ),
         Track(
@@ -43,6 +47,7 @@ object MockTracks {
             artist = "SoundHelix",
             album = "Synth Explorations",
             durationMs = 498000L,
+            artworkUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
             streamUri = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
         )
     )

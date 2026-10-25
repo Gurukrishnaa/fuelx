@@ -60,6 +60,7 @@ class PlaybackService : MediaSessionService() {
                     title = currentItem.mediaMetadata.title?.toString() ?: "",
                     artist = currentItem.mediaMetadata.artist?.toString() ?: "",
                     album = currentItem.mediaMetadata.albumTitle?.toString(),
+                    artworkUrl = currentItem.mediaMetadata.artworkUri?.toString(),
                     durationMs = player.duration.takeIf { it > 0 },
                     streamUri = currentItem.localConfiguration?.uri?.toString()
                 )

@@ -44,20 +44,15 @@ fun MiniPlayer(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album art thumbnail placeholder
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(AccentSecondary.copy(alpha = 0.25f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "♪",
-                    color = AccentPrimary,
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
+            // Album art thumbnail
+            TrackArtwork(
+                artworkUrl = currentTrack.artworkUrl,
+                contentDescription = "${currentTrack.title} thumbnail",
+                modifier = Modifier.size(46.dp),
+                shape = RoundedCornerShape(10.dp),
+                placeholderColor = AccentSecondary.copy(alpha = 0.25f),
+                placeholderText = "♪"
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 

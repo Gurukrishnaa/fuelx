@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.androidx.media3.session)
 
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.coil.compose)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

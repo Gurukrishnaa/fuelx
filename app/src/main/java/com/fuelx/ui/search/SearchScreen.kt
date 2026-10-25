@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fuelx.data.MusicRepository
 import com.fuelx.model.Track
+import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -230,15 +231,14 @@ fun SearchScreen(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(AccentPrimary.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("♪", color = AccentPrimary)
-                                }
+                                TrackArtwork(
+                                    artworkUrl = track.artworkUrl,
+                                    contentDescription = "${track.title} artwork",
+                                    modifier = Modifier.size(42.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    placeholderColor = AccentPrimary.copy(alpha = 0.2f),
+                                    placeholderText = "♪"
+                                )
 
                                 Spacer(modifier = Modifier.width(12.dp))
 

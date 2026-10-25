@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fuelx.model.Track
+import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 
 @Composable
@@ -181,20 +182,16 @@ private fun RecentTrackCard(
         )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            Box(
+            TrackArtwork(
+                artworkUrl = track.artworkUrl,
+                contentDescription = "${track.title} artwork",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(AccentSecondary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "♪",
-                    color = if (isSelected) AccentPrimary else TextSecondary,
-                    style = MaterialTheme.typography.headlineMedium
-                )
-            }
+                    .height(110.dp),
+                shape = RoundedCornerShape(10.dp),
+                placeholderColor = AccentSecondary.copy(alpha = 0.2f),
+                placeholderText = "♪"
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = track.title,
@@ -237,24 +234,31 @@ private fun TrackListItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(AccentPrimary.copy(alpha = 0.15f)),
+                modifier = Modifier.size(44.dp),
                 contentAlignment = Alignment.Center
             ) {
+                TrackArtwork(
+                    artworkUrl = track.artworkUrl,
+                    contentDescription = "${track.title} thumbnail",
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(8.dp),
+                    placeholderColor = AccentPrimary.copy(alpha = 0.15f),
+                    placeholderText = "♪"
+                )
                 if (isCurrent && isPlaying) {
-                    Icon(
-                        imageVector = Icons.Rounded.GraphicEq,
-                        contentDescription = "Playing",
-                        tint = AccentPrimary
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = "Play",
-                        tint = if (isCurrent) AccentPrimary else TextSecondary
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(DarkBackground.copy(alpha = 0.65f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = "Playing",
+                            tint = AccentPrimary
+                        )
+                    }
                 }
             }
 

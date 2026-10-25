@@ -65,13 +65,16 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
 
     fun insertFavorite(track: Track, addedAtMs: Long = System.currentTimeMillis()): Boolean {
         val db = writableDatabase
+        val artwork = if (!track.artworkUrl.isNullOrBlank()) track.artworkUrl
+            else MockTracks.sampleTracks.find { it.id == track.id }?.artworkUrl
+
         val values = ContentValues().apply {
             put(COL_TRACK_ID, track.id)
             put(COL_TITLE, track.title)
             put(COL_ARTIST, track.artist)
             put(COL_ALBUM, track.album)
             put(COL_DURATION_MS, track.durationMs ?: 0L)
-            put(COL_ARTWORK_URL, track.artworkUrl)
+            put(COL_ARTWORK_URL, artwork)
             put(COL_STREAM_URI, track.streamUri)
             put(COL_ADDED_AT, addedAtMs)
         }
@@ -112,14 +115,19 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             val streamIdx = it.getColumnIndexOrThrow(COL_STREAM_URI)
 
             while (it.moveToNext()) {
+                val trackId = it.getString(idIdx)
                 val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
+                val rawArtwork = it.getString(artworkIdx)
+                val artwork = if (!rawArtwork.isNullOrBlank()) rawArtwork
+                    else MockTracks.sampleTracks.find { t -> t.id == trackId }?.artworkUrl
+
                 list.add(
                     Track(
-                        id = it.getString(idIdx),
+                        id = trackId,
                         title = it.getString(titleIdx),
                         artist = it.getString(artistIdx),
                         album = it.getString(albumIdx),
-                        artworkUrl = it.getString(artworkIdx),
+                        artworkUrl = artwork,
                         durationMs = duration,
                         streamUri = it.getString(streamIdx)
                     )
@@ -207,14 +215,19 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             val streamIdx = it.getColumnIndexOrThrow(COL_STREAM_URI)
 
             while (it.moveToNext()) {
+                val trackId = it.getString(idIdx)
                 val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
+                val rawArtwork = it.getString(artworkIdx)
+                val artwork = if (!rawArtwork.isNullOrBlank()) rawArtwork
+                    else MockTracks.sampleTracks.find { t -> t.id == trackId }?.artworkUrl
+
                 list.add(
                     Track(
-                        id = it.getString(idIdx),
+                        id = trackId,
                         title = it.getString(titleIdx),
                         artist = it.getString(artistIdx),
                         album = it.getString(albumIdx),
-                        artworkUrl = it.getString(artworkIdx),
+                        artworkUrl = artwork,
                         durationMs = duration,
                         streamUri = it.getString(streamIdx)
                     )

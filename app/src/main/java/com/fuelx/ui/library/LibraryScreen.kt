@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.model.Track
+import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 
 enum class LibraryTab {
@@ -358,30 +359,34 @@ private fun LibraryTrackItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album artwork placeholder
+            // Album artwork
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (isCurrent) AccentPrimary.copy(alpha = 0.2f)
-                        else DarkSurfaceVariant
-                    ),
+                modifier = Modifier.size(48.dp),
                 contentAlignment = Alignment.Center
             ) {
+                TrackArtwork(
+                    artworkUrl = track.artworkUrl,
+                    contentDescription = "${track.title} artwork",
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(8.dp),
+                    placeholderColor = if (isCurrent) AccentPrimary.copy(alpha = 0.2f) else DarkSurfaceVariant,
+                    placeholderText = "♪"
+                )
                 if (isCurrent && isPlaying) {
-                    Icon(
-                        imageVector = Icons.Rounded.GraphicEq,
-                        contentDescription = "Playing",
-                        tint = AccentPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Text(
-                        text = "♪",
-                        color = if (isCurrent) AccentPrimary else TextSecondary,
-                        style = MaterialTheme.typography.titleLarge
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(DarkBackground.copy(alpha = 0.65f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = "Playing",
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 

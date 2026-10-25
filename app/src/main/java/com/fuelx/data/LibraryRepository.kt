@@ -48,7 +48,16 @@ class DefaultLibraryRepository(
     }
 
     private suspend fun loadInitialData() = withContext(Dispatchers.IO) {
-        val favs = database.getAllFavorites()
+        val favs = database.getAllFavorites().map { fav ->
+            if (fav.artworkUrl.isNullOrBlank()) {
+                val known = MockTracks.sampleTracks.find { it.id == fav.id }?.artworkUrl
+                if (known != null) {
+                    val updated = fav.copy(artworkUrl = known)
+                    database.insertFavorite(updated)
+                    updated
+                } else fav
+            } else fav
+        }
         val hist = database.getAllHistory()
 
         synchronized(favoriteIds) {
@@ -78,9 +87,13 @@ class DefaultLibraryRepository(
     }
 
     override suspend fun addFavorite(track: Track) = withContext(Dispatchers.IO) {
-        database.insertFavorite(track)
+        val trackToSave = if (track.artworkUrl.isNullOrBlank()) {
+            val known = MockTracks.sampleTracks.find { it.id == track.id }?.artworkUrl
+            if (known != null) track.copy(artworkUrl = known) else track
+        } else track
+        database.insertFavorite(trackToSave)
         synchronized(favoriteIds) {
-            favoriteIds.add(track.id)
+            favoriteIds.add(trackToSave.id)
         }
         _favorites.value = database.getAllFavorites()
     }
