@@ -57,6 +57,11 @@ class PlayerController(
     val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
 
     private var playlist: List<Track> = emptyList()
+    private var autoRetryCount = 0
+
+    companion object {
+        private const val MAX_AUTO_RETRIES = 2
+    }
 
     init {
         // Restore last known state from storage into UI immediately
@@ -104,6 +109,8 @@ class PlayerController(
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
+                    autoRetryCount = 0
+                    _playbackError.value = null
                     startPositionUpdates()
                 } else {
                     stopPositionUpdates()
@@ -142,6 +149,50 @@ class PlayerController(
                 }
                 _currentPositionMs.value = 0L
                 _durationMs.value = player.duration.coerceAtLeast(0L)
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _isBuffering.value = false
+                val current = _currentTrack.value
+                val pos = player.currentPosition.coerceAtLeast(0L)
+
+                // Attempt auto-recovery if within retry budget (handles stream expiration / token timeout / 403)
+                if (current != null && autoRetryCount < MAX_AUTO_RETRIES) {
+                    autoRetryCount++
+                    _isBuffering.value = true
+                    _playbackError.value = null
+                    scope.launch {
+                        kotlinx.coroutines.delay(600) // Brief backoff
+                        val result = repository.resolveStream(current.id, forceRefresh = true)
+                        if (result.isSuccess) {
+                            val streamInfo = result.getOrNull()
+                            val streamUri = streamInfo?.uri?.toString()
+                            if (streamUri != null) {
+                                val metadata = MediaMetadata.Builder()
+                                    .setTitle(current.title)
+                                    .setArtist(current.artist)
+                                    .setAlbumTitle(current.album)
+                                    .setArtworkUri(if (!current.artworkUrl.isNullOrBlank()) Uri.parse(current.artworkUrl) else null)
+                                    .build()
+
+                                val mediaItem = MediaItem.Builder()
+                                    .setMediaId(current.id)
+                                    .setUri(streamUri)
+                                    .setMediaMetadata(metadata)
+                                    .build()
+
+                                player.setMediaItem(mediaItem, pos)
+                                player.prepare()
+                                player.play()
+                                return@launch
+                            }
+                        }
+                        _isBuffering.value = false
+                        _playbackError.value = "Playback error: ${error.localizedMessage ?: "Failed to recover stream"}"
+                    }
+                } else {
+                    _playbackError.value = "Playback error: ${error.localizedMessage ?: "Network or stream issue"}"
+                }
             }
         })
 
@@ -297,6 +348,13 @@ class PlayerController(
             playlist.size - 1
         }
         playTrack(playlist[prevIndex], playlist)
+    }
+
+    fun retryPlayback() {
+        val current = _currentTrack.value ?: return
+        _playbackError.value = null
+        autoRetryCount = 0
+        playTrack(current, playlist)
     }
 
     fun clearError() {

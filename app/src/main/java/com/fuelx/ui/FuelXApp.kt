@@ -1,6 +1,7 @@
 package com.fuelx.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -8,6 +9,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,7 @@ import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
+import com.fuelx.util.NetworkMonitor
 import com.fuelx.util.ParsedLyrics
 import kotlinx.coroutines.launch
 
@@ -40,6 +43,8 @@ fun FuelXApp() {
     val lyricsRepository = remember { DefaultLyricsRepository() }
     val libraryRepository = remember { DefaultLibraryRepository.getInstance(context) }
     val playerController = remember { PlayerController(context, repository, libraryRepository) }
+    val networkMonitor = remember { NetworkMonitor(context) }
+    val isOnline by networkMonitor.isOnline.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -55,6 +60,7 @@ fun FuelXApp() {
     DisposableEffect(Unit) {
         onDispose {
             playerController.release()
+            networkMonitor.unregister()
         }
     }
 
@@ -142,6 +148,13 @@ fun FuelXApp() {
         }
     }
 
+    // Auto-reload trending tracks when network reconnects
+    LaunchedEffect(isOnline) {
+        if (isOnline && (trendingTracks.isEmpty() || trendingError != null)) {
+            retryCount++
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -149,6 +162,39 @@ fun FuelXApp() {
     ) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                AnimatedVisibility(
+                    visible = !isOnline,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .statusBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.WifiOff,
+                                contentDescription = "Offline",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "You're offline • Reconnecting...",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            },
             bottomBar = {
                 Column {
                     // Mini Player (Only visible when not full screen)
@@ -157,6 +203,8 @@ fun FuelXApp() {
                             currentTrack = track,
                             isPlaying = isPlaying,
                             isBuffering = isBuffering,
+                            playbackError = playbackError,
+                            onRetryPlayback = { playerController.retryPlayback() },
                             onPlayPauseClick = { playerController.togglePlayPause() },
                             onNextClick = { playerController.skipNext() },
                             onMiniPlayerClick = { isNowPlayingOpen = true }
@@ -277,6 +325,8 @@ fun FuelXApp() {
                 currentPositionMs = currentPositionMs,
                 durationMs = durationMs,
                 isBuffering = isBuffering,
+                playbackError = playbackError,
+                onRetryPlayback = { playerController.retryPlayback() },
                 isFavorite = favorites.any { it.id == currentTrack?.id },
                 onToggleFavorite = {
                     currentTrack?.let { onToggleFavorite(it) }

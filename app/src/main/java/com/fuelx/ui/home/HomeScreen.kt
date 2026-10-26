@@ -84,6 +84,49 @@ fun HomeScreen(
         return
     }
 
+    if (tracks.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(DarkBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CloudOff,
+                    contentDescription = "No Music",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "No songs loaded",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Check connection and tap retry",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Retry")
+                }
+            }
+        }
+        return
+    }
+
     val displayRecent = if (recentlyPlayed.isNotEmpty()) recentlyPlayed.take(8) else tracks.take(4)
     val recentTitle = if (recentlyPlayed.isNotEmpty()) "Recently Played" else "Quick Picks"
 

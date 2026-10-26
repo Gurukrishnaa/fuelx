@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -24,7 +25,9 @@ fun MiniPlayer(
     currentTrack: Track,
     isPlaying: Boolean,
     isBuffering: Boolean = false,
+    playbackError: String? = null,
     onPlayPauseClick: () -> Unit,
+    onRetryPlayback: () -> Unit = onPlayPauseClick,
     onNextClick: () -> Unit,
     onMiniPlayerClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -67,16 +70,23 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = currentTrack.artist,
+                    text = if (playbackError != null) "Tap to retry • $playbackError" else currentTrack.artist,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = if (playbackError != null) AccentSecondary else TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Play / Pause / Buffering button
-            IconButton(onClick = onPlayPauseClick) {
-                if (isBuffering) {
+            // Play / Pause / Buffering / Retry button
+            IconButton(onClick = if (playbackError != null) onRetryPlayback else onPlayPauseClick) {
+                if (playbackError != null) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Retry Playback",
+                        tint = AccentSecondary
+                    )
+                } else if (isBuffering) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,

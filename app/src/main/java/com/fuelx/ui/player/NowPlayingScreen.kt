@@ -28,11 +28,13 @@ fun NowPlayingScreen(
     durationMs: Long? = null,
     isBuffering: Boolean = false,
     isFavorite: Boolean = false,
+    playbackError: String? = null,
     onToggleFavorite: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    onRetryPlayback: () -> Unit = {},
     onOpenLyrics: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -148,7 +150,47 @@ fun NowPlayingScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        if (playbackError != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = AccentSecondary.copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, AccentSecondary.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.WarningAmber,
+                            contentDescription = "Error",
+                            tint = AccentSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = playbackError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    TextButton(onClick = onRetryPlayback) {
+                        Text("Retry", color = AccentPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Seek Slider
         Slider(

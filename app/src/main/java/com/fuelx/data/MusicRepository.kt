@@ -10,7 +10,7 @@ import com.fuelx.data.youtube.YouTubeMusicProvider
 interface MusicRepository {
     suspend fun getTrending(): Result<List<Track>>
     suspend fun search(query: String): Result<List<Track>>
-    suspend fun resolveStream(trackId: String): Result<StreamInfo>
+    suspend fun resolveStream(trackId: String, forceRefresh: Boolean = false): Result<StreamInfo>
 }
 
 class DefaultMusicRepository(
@@ -53,17 +53,21 @@ class DefaultMusicRepository(
         }
     }
 
-    override suspend fun resolveStream(trackId: String): Result<StreamInfo> = withContext(Dispatchers.IO) {
-        // Check stream cache and verify expiration
+    override suspend fun resolveStream(trackId: String, forceRefresh: Boolean): Result<StreamInfo> = withContext(Dispatchers.IO) {
+        // If forceRefresh, evict cached stream to recover from expiration or HTTP 403
         synchronized(streamCache) {
-            val cached = streamCache[trackId]
-            if (cached != null) {
-                val now = System.currentTimeMillis()
-                val expiresAt = cached.expiresAtEpochMs
-                if (expiresAt == null || expiresAt > now + 60_000L) { // At least 1 min valid
-                    return@withContext Result.success(cached)
-                }
+            if (forceRefresh) {
                 streamCache.remove(trackId)
+            } else {
+                val cached = streamCache[trackId]
+                if (cached != null) {
+                    val now = System.currentTimeMillis()
+                    val expiresAt = cached.expiresAtEpochMs
+                    if (expiresAt == null || expiresAt > now + 60_000L) { // At least 1 min valid
+                        return@withContext Result.success(cached)
+                    }
+                    streamCache.remove(trackId)
+                }
             }
         }
 
