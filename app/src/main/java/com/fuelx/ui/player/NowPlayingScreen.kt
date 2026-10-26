@@ -1,6 +1,8 @@
 package com.fuelx.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,12 @@ fun NowPlayingScreen(
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
 
+    // Reset seekbar drag state when the track switches
+    LaunchedEffect(track.id) {
+        isDragging = false
+        dragProgress = 0f
+    }
+
     val effectiveDuration = when {
         durationMs != null && durationMs > 0L -> durationMs
         track.durationMs != null && track.durationMs > 0L -> track.durationMs
@@ -61,6 +69,10 @@ fun NowPlayingScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { /* Consume taps so they don't bleed through to the screen beneath */ }
             .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -101,11 +113,16 @@ fun NowPlayingScreen(
 
         Spacer(modifier = Modifier.weight(0.5f))
 
-        // Large Album Art Box
+        // Large Album Art Box (intercepts touches so tapping cover never changes song)
         TrackArtwork(
             artworkUrl = track.artworkUrl,
             contentDescription = "${track.title} artwork",
-            modifier = Modifier.size(280.dp),
+            modifier = Modifier
+                .size(280.dp)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { /* Explicit no-op: cover tap must not trigger track switch */ },
             shape = RoundedCornerShape(24.dp),
             placeholderColor = AccentSecondary.copy(alpha = 0.2f),
             placeholderText = "♪"

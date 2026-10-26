@@ -325,13 +325,15 @@ private fun TrackListItem(
                 )
             }
 
-            // Duration
-            Text(
-                text = track.formattedDuration,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
+            // Duration (only rendered when known)
+            track.formattedDuration?.let { dur ->
+                Text(
+                    text = dur,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
 
             // Heart / Favorite button
             IconButton(

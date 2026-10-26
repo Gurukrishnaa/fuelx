@@ -152,6 +152,16 @@ class InnertubeClient(
         if (videoId.isNullOrBlank()) return null
 
         val subtitleRuns = card.optJSONObject("subtitle")?.optJSONArray("runs")
+        var cardDurationMs: Long? = null
+        if (subtitleRuns != null) {
+            for (i in 0 until subtitleRuns.length()) {
+                val t = subtitleRuns.optJSONObject(i)?.optString("text")?.trim().orEmpty()
+                if (t.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
+                    cardDurationMs = parseDurationStringToMs(t)
+                    break
+                }
+            }
+        }
         val artist = extractSubtitleText(subtitleRuns)
 
         val thumbUrl = extractThumbnail(card.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer"))
@@ -162,7 +172,7 @@ class InnertubeClient(
             artist = artist.ifBlank { "YouTube Music" },
             album = "YouTube Music",
             artworkUrl = thumbUrl,
-            durationMs = null,
+            durationMs = cardDurationMs,
             streamUri = null
         )
     }
@@ -212,7 +222,7 @@ class InnertubeClient(
                     val cleanRun = runText.trim()
                     if (cleanRun.isNotEmpty() && cleanRun != "•" && cleanRun != "Song") {
                         // Check if it's duration (e.g. "3:45" or "4:12")
-                        if (cleanRun.matches(Regex("\\d+:\\d+"))) {
+                        if (cleanRun.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
                             durationMs = parseDurationStringToMs(cleanRun)
                         } else {
                             parts.add(cleanRun)
@@ -224,6 +234,42 @@ class InnertubeClient(
                     if (parts.size > 1) {
                         album = parts[1]
                     }
+                }
+            }
+        }
+
+        // Also check all subsequent flexColumns and fixedColumns for duration
+        if (durationMs == null) {
+            for (c in 1 until flexColumns.length()) {
+                val runs = flexColumns.optJSONObject(c)
+                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                    ?.optJSONObject("text")?.optJSONArray("runs") ?: continue
+                for (k in 0 until runs.length()) {
+                    val t = runs.optJSONObject(k)?.optString("text")?.trim().orEmpty()
+                    if (t.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
+                        durationMs = parseDurationStringToMs(t)
+                        break
+                    }
+                }
+                if (durationMs != null) break
+            }
+        }
+
+        if (durationMs == null) {
+            val fixedCols = renderer.optJSONArray("fixedColumns")
+            if (fixedCols != null) {
+                for (c in 0 until fixedCols.length()) {
+                    val runs = fixedCols.optJSONObject(c)
+                        ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                        ?.optJSONObject("text")?.optJSONArray("runs") ?: continue
+                    for (k in 0 until runs.length()) {
+                        val t = runs.optJSONObject(k)?.optString("text")?.trim().orEmpty()
+                        if (t.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
+                            durationMs = parseDurationStringToMs(t)
+                            break
+                        }
+                    }
+                    if (durationMs != null) break
                 }
             }
         }

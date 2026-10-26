@@ -26,8 +26,9 @@ class InvidiousStreamResolver(
     // Primary resilient instances with automatic round-robin / failover
     private val instances = listOf(
         "https://yt.chocolatemoo53.com",
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
+        "https://invidious.privacydev.net",
+        "https://invidious.jing.rocks",
+        "https://iv.melmac.space",
         "https://invidious.drgns.space"
     )
 
@@ -37,10 +38,12 @@ class InvidiousStreamResolver(
         for (instance in instances) {
             try {
                 // Strategy 1: Direct proxied latest_version itag=140 (128kbps AAC audio/mp4)
+                // Resolve redirects ahead of time so ExoPlayer connects directly to media CDN without hop latency
                 val directUrl = "$instance/latest_version?id=$videoId&itag=140&local=true"
-                if (testStreamUrl(directUrl)) {
+                val resolvedDirectUrl = resolveDirectStreamUrl(directUrl)
+                if (resolvedDirectUrl != null) {
                     return@withContext StreamInfo(
-                        uri = Uri.parse(directUrl),
+                        uri = Uri.parse(resolvedDirectUrl),
                         mimeType = "audio/mp4",
                         expiresAtEpochMs = System.currentTimeMillis() + 4 * 3600 * 1000L
                     )
@@ -81,19 +84,20 @@ class InvidiousStreamResolver(
                     }
 
                     if (bestAudioUrl != null) {
-                        val finalUrl = if (bestAudioUrl.startsWith("/")) {
+                        val rawUrl = if (bestAudioUrl.startsWith("/")) {
                             "$instance$bestAudioUrl"
                         } else {
-                            // Ensure proxy parameter is preserved for external network routing
-                            if (!bestAudioUrl.contains("local=true")) {
+                            if (!bestAudioUrl.contains("local=true") && !bestAudioUrl.contains("googlevideo.com")) {
                                 "$instance/latest_version?id=$videoId&itag=140&local=true"
                             } else {
                                 bestAudioUrl
                             }
                         }
 
+                        val finalResolvedUrl = resolveDirectStreamUrl(rawUrl) ?: rawUrl
+
                         return@withContext StreamInfo(
-                            uri = Uri.parse(finalUrl),
+                            uri = Uri.parse(finalResolvedUrl),
                             mimeType = bestMimeType,
                             durationMs = resolvedDurationMs,
                             expiresAtEpochMs = System.currentTimeMillis() + 4 * 3600 * 1000L
@@ -110,7 +114,7 @@ class InvidiousStreamResolver(
         throw lastError ?: IOException("Failed to resolve audio stream for track: $videoId")
     }
 
-    private fun testStreamUrl(url: String): Boolean {
+    private fun resolveDirectStreamUrl(url: String): String? {
         return try {
             val request = Request.Builder()
                 .url(url)
@@ -120,14 +124,19 @@ class InvidiousStreamResolver(
                 .build()
 
             client.newCall(request).execute().use { response ->
-                response.isSuccessful || response.code == 206 || response.code == 302
+                if (response.isSuccessful || response.code == 206) {
+                    // Following redirects extracts the final CDN / companion video playback URL
+                    response.request.url.toString()
+                } else {
+                    null
+                }
             }
         } catch (e: Exception) {
-            false
+            null
         }
     }
 
     companion object {
-        private const val USER_AGENT = "FuelX/1.0 (Android; Mobile)"
+        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     }
 }

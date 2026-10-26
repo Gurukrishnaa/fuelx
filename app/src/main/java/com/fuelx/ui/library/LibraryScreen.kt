@@ -413,13 +413,15 @@ private fun LibraryTrackItem(
                 )
             }
 
-            // Duration
-            Text(
-                text = track.formattedDuration,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted,
-                modifier = Modifier.padding(horizontal = 6.dp)
-            )
+            // Duration (only rendered when known)
+            track.formattedDuration?.let { dur ->
+                Text(
+                    text = dur,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
 
             // Heart / Favorite Icon button
             IconButton(

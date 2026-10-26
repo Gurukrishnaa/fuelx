@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,6 +79,10 @@ fun LyricsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { /* Consume taps to avoid bleeding through to screens beneath */ }
             .statusBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {

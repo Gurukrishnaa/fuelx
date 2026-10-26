@@ -260,12 +260,14 @@ fun SearchScreen(
                                     )
                                 }
 
-                                Text(
-                                    text = track.formattedDuration,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextMuted,
-                                    modifier = Modifier.padding(horizontal = 4.dp)
-                                )
+                                track.formattedDuration?.let { dur ->
+                                    Text(
+                                        text = dur,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
 
                                 IconButton(
                                     onClick = { onToggleFavorite(track) },

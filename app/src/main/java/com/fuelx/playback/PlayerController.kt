@@ -178,6 +178,7 @@ class PlayerController(
                                 val mediaItem = MediaItem.Builder()
                                     .setMediaId(current.id)
                                     .setUri(streamUri)
+                                    .setMimeType(streamInfo.mimeType)
                                     .setMediaMetadata(metadata)
                                     .build()
 
@@ -233,6 +234,7 @@ class PlayerController(
             MediaItem.Builder()
                 .setMediaId(t.id)
                 .setUri(t.streamUri)
+                .setMimeType("audio/mp4")
                 .setMediaMetadata(metadata)
                 .build()
         }
@@ -246,6 +248,11 @@ class PlayerController(
     fun playTrack(track: Track, tracks: List<Track> = playlist) {
         this.playlist = tracks
         _currentTrack.value = track
+        // Immediately reset position and previous duration so progress bar never retains previous song's time
+        _currentPositionMs.value = 0L
+        _durationMs.value = track.durationMs ?: 0L
+        stopPositionUpdates()
+
         _isBuffering.value = true
         _playbackError.value = null
 
@@ -292,6 +299,7 @@ class PlayerController(
             val mediaItem = MediaItem.Builder()
                 .setMediaId(track.id)
                 .setUri(streamUri)
+                .setMimeType(streamInfo?.mimeType ?: "audio/mp4")
                 .setMediaMetadata(metadata)
                 .build()
 
