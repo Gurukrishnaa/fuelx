@@ -247,11 +247,13 @@ class PlayerController(
 
     fun playTrack(track: Track, tracks: List<Track> = playlist) {
         this.playlist = tracks
+        // Immediately halt position updates without saving previous song's position
+        stopPositionUpdates(saveCurrentPlayerPosition = false)
+        controller?.pause()
         _currentTrack.value = track
-        // Immediately reset position and previous duration so progress bar never retains previous song's time
+        // Immediately reset position and previous duration so timer and progress bar start at 0:00
         _currentPositionMs.value = 0L
         _durationMs.value = track.durationMs ?: 0L
-        stopPositionUpdates()
 
         _isBuffering.value = true
         _playbackError.value = null
@@ -416,13 +418,15 @@ class PlayerController(
         }
     }
 
-    private fun stopPositionUpdates() {
+    private fun stopPositionUpdates(saveCurrentPlayerPosition: Boolean = true) {
         positionJob?.cancel()
         positionJob = null
-        controller?.let {
-            val pos = it.currentPosition
-            _currentPositionMs.value = pos
-            preferences.savePositionOnly(pos)
+        if (saveCurrentPlayerPosition) {
+            controller?.let {
+                val pos = it.currentPosition
+                _currentPositionMs.value = pos
+                preferences.savePositionOnly(pos)
+            }
         }
     }
 

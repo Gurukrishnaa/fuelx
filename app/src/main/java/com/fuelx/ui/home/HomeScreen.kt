@@ -21,12 +21,16 @@ import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 
+import androidx.compose.foundation.BorderStroke
+
 @Composable
 fun HomeScreen(
     tracks: List<Track>,
     currentTrack: Track?,
     isPlaying: Boolean,
     recentlyPlayed: List<Track> = emptyList(),
+    selectedLanguages: Set<String> = emptySet(),
+    onOpenLanguagePicker: () -> Unit = {},
     isFavorite: (String) -> Boolean = { false },
     onToggleFavorite: (Track) -> Unit = {},
     isLoading: Boolean = false,
@@ -157,6 +161,39 @@ fun HomeScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+
+                // Language Selector Button
+                Surface(
+                    onClick = onOpenLanguagePicker,
+                    shape = RoundedCornerShape(20.dp),
+                    color = DarkSurfaceVariant,
+                    border = BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Language,
+                            contentDescription = "Languages",
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val langLabel = if (selectedLanguages.isEmpty()) {
+                            "All"
+                        } else if (selectedLanguages.size <= 2) {
+                            selectedLanguages.joinToString(", ")
+                        } else {
+                            "${selectedLanguages.first()} +${selectedLanguages.size - 1}"
+                        }
+                        Text(
+                            text = langLabel,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AccentPrimary
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -186,8 +223,13 @@ fun HomeScreen(
 
         // All Tracks header
         item {
+            val catalogTitle = if (selectedLanguages.isNotEmpty()) {
+                "Top ${selectedLanguages.joinToString(" • ")} Hits"
+            } else {
+                "Featured Catalog"
+            }
             Text(
-                text = "Featured Catalog",
+                text = catalogTitle,
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
             )

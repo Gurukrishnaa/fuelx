@@ -25,7 +25,8 @@ interface MusicProvider {
     suspend fun getStream(trackId: String): StreamInfo
 
     /**
-     * Get initial recommended/trending tracks for the Home screen.
+     * Get initial recommended/trending tracks for the Home screen, optionally filtered by language preferences.
      */
     suspend fun getTrendingTracks(): List<Track>
+    suspend fun getTrendingTracks(languages: Set<String>): List<Track> = getTrendingTracks()
 }

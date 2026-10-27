@@ -19,8 +19,10 @@ import androidx.compose.ui.unit.dp
 import com.fuelx.data.DefaultLibraryRepository
 import com.fuelx.data.DefaultLyricsRepository
 import com.fuelx.data.DefaultMusicRepository
+import com.fuelx.data.PlaybackPreferences
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
+import com.fuelx.ui.components.LanguageSelectionDialog
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
 import com.fuelx.ui.library.LibraryScreen
@@ -39,6 +41,7 @@ enum class ScreenTab {
 @Composable
 fun FuelXApp() {
     val context = LocalContext.current
+    val preferences = remember { PlaybackPreferences(context) }
     val repository = remember { DefaultMusicRepository() }
     val lyricsRepository = remember { DefaultLyricsRepository() }
     val libraryRepository = remember { DefaultLibraryRepository.getInstance(context) }
@@ -47,6 +50,10 @@ fun FuelXApp() {
     val isOnline by networkMonitor.isOnline.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    // Language preference states (prompts on initial fresh open if not set)
+    var selectedLanguages by remember { mutableStateOf(preferences.getSelectedLanguages()) }
+    var showLanguageDialog by remember { mutableStateOf(!preferences.isLanguagePreferenceSet()) }
 
     val favorites by libraryRepository.favorites.collectAsState()
     val history by libraryRepository.history.collectAsState()
@@ -101,11 +108,11 @@ fun FuelXApp() {
         selectedTab = ScreenTab.HOME
     }
 
-    // Fetch initial trending tracks via repository
-    LaunchedEffect(retryCount) {
+    // Fetch initial trending tracks via repository based on language preferences
+    LaunchedEffect(retryCount, selectedLanguages) {
         isTrendingLoading = true
         trendingError = null
-        val result = repository.getTrending()
+        val result = repository.getTrending(selectedLanguages)
         isTrendingLoading = false
         if (result.isSuccess) {
             val list = result.getOrDefault(emptyList())
@@ -272,6 +279,8 @@ fun FuelXApp() {
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
                             recentlyPlayed = history,
+                            selectedLanguages = selectedLanguages,
+                            onOpenLanguagePicker = { showLanguageDialog = true },
                             isFavorite = { id -> favorites.any { it.id == id } },
                             onToggleFavorite = onToggleFavorite,
                             isLoading = isTrendingLoading,
@@ -279,6 +288,7 @@ fun FuelXApp() {
                             onRetry = { retryCount++ },
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
+                                isNowPlayingOpen = true
                             }
                         )
                     }
@@ -290,6 +300,7 @@ fun FuelXApp() {
                             onToggleFavorite = onToggleFavorite,
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
+                                isNowPlayingOpen = true
                             },
                             onBackClick = { selectedTab = ScreenTab.HOME }
                         )
@@ -309,6 +320,7 @@ fun FuelXApp() {
                             },
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
+                                isNowPlayingOpen = true
                             },
                             onBackClick = { selectedTab = ScreenTab.HOME }
                         )
@@ -353,6 +365,24 @@ fun FuelXApp() {
                 },
                 onRetry = { lyricsRetryCount++ },
                 onClose = { isLyricsOpen = false }
+            )
+        }
+
+        // Language Preference Dialog (Fresh open & User triggered)
+        if (showLanguageDialog) {
+            LanguageSelectionDialog(
+                initialSelected = selectedLanguages.ifEmpty { setOf("English", "Tamil") },
+                canDismiss = preferences.isLanguagePreferenceSet(),
+                onLanguagesSelected = { newLanguages ->
+                    selectedLanguages = newLanguages
+                    preferences.setSelectedLanguages(newLanguages)
+                    showLanguageDialog = false
+                },
+                onDismissRequest = {
+                    if (preferences.isLanguagePreferenceSet()) {
+                        showLanguageDialog = false
+                    }
+                }
             )
         }
     }

@@ -69,7 +69,20 @@ class PlaybackPreferences(context: Context) {
         )
     }
 
+    fun getSelectedLanguages(): Set<String> {
+        return prefs.getStringSet(KEY_SELECTED_LANGUAGES, emptySet()) ?: emptySet()
+    }
+
+    fun setSelectedLanguages(languages: Set<String>) {
+        prefs.edit().putStringSet(KEY_SELECTED_LANGUAGES, languages).apply()
+    }
+
+    fun isLanguagePreferenceSet(): Boolean {
+        return prefs.contains(KEY_SELECTED_LANGUAGES) && (prefs.getStringSet(KEY_SELECTED_LANGUAGES, null)?.isNotEmpty() == true)
+    }
+
     companion object {
+        private const val KEY_SELECTED_LANGUAGES = "selected_languages"
         private const val KEY_TRACK_ID = "last_track_id"
         private const val KEY_POSITION_MS = "last_position_ms"
         private const val KEY_TITLE = "last_title"

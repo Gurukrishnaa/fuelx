@@ -41,8 +41,12 @@ class YouTubeMusicProvider(
     }
 
     override suspend fun getTrendingTracks(): List<Track> {
+        return getTrendingTracks(emptySet())
+    }
+
+    override suspend fun getTrendingTracks(languages: Set<String>): List<Track> {
         return try {
-            val trending = innertubeClient.getTrending()
+            val trending = innertubeClient.getTrending(languages)
             trending.forEach { trackCache[it.id] = it }
             trending
         } catch (e: Exception) {

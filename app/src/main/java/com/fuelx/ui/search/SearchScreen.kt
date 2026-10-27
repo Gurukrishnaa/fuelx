@@ -28,6 +28,12 @@ import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 import kotlinx.coroutines.delay
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+
 @Composable
 fun SearchScreen(
     repository: MusicRepository,
@@ -38,6 +44,9 @@ fun SearchScreen(
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Track>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
@@ -124,6 +133,11 @@ fun SearchScreen(
                 }
             },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+            }),
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = DarkSurface,
@@ -219,7 +233,11 @@ fun SearchScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onTrackSelect(track, searchResults) },
+                                .clickable {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    onTrackSelect(track, searchResults)
+                                },
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isCurrent) DarkSurfaceVariant else DarkSurface

@@ -61,13 +61,36 @@ class InnertubeClient(
         }
     }
 
-    suspend fun getTrending(): List<Track> = withContext(Dispatchers.IO) {
-        // Query top trending global music to populate the home discover list
-        val hits = search("Top Music Hits 2024")
-        if (hits.isNotEmpty()) {
-            hits
+    suspend fun getTrending(languages: Set<String> = emptySet()): List<Track> = withContext(Dispatchers.IO) {
+        if (languages.isEmpty()) {
+            val hits = search("Top Music Hits 2024")
+            return@withContext if (hits.isNotEmpty()) hits else search("Trending Songs")
+        }
+
+        val allTracks = mutableListOf<Track>()
+        val seenIds = mutableSetOf<String>()
+
+        for (lang in languages) {
+            val query = when (lang.lowercase()) {
+                "tamil" -> "Top Tamil Songs 2024"
+                "hindi" -> "Top Hindi Songs 2024"
+                "malayalam" -> "Top Malayalam Songs 2024"
+                "english" -> "Top English Hits 2024"
+                else -> "Top $lang Songs"
+            }
+            val results = search(query)
+            results.take(10).forEach { track ->
+                if (seenIds.add(track.id)) {
+                    allTracks.add(track)
+                }
+            }
+        }
+
+        if (allTracks.isNotEmpty()) {
+            allTracks
         } else {
-            search("Trending Songs")
+            val fallback = search("Top Music Hits 2024")
+            if (fallback.isNotEmpty()) fallback else search("Trending Songs")
         }
     }
 

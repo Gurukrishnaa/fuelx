@@ -9,6 +9,7 @@ import com.fuelx.data.youtube.YouTubeMusicProvider
 
 interface MusicRepository {
     suspend fun getTrending(): Result<List<Track>>
+    suspend fun getTrending(languages: Set<String>): Result<List<Track>> = getTrending()
     suspend fun search(query: String): Result<List<Track>>
     suspend fun resolveStream(trackId: String, forceRefresh: Boolean = false): Result<StreamInfo>
 }
@@ -21,9 +22,11 @@ class DefaultMusicRepository(
     private val searchCache = LinkedHashMap<String, List<Track>>(20, 0.75f, true)
     private val streamCache = LinkedHashMap<String, StreamInfo>(20, 0.75f, true)
 
-    override suspend fun getTrending(): Result<List<Track>> = withContext(Dispatchers.IO) {
+    override suspend fun getTrending(): Result<List<Track>> = getTrending(emptySet())
+
+    override suspend fun getTrending(languages: Set<String>): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
-            val tracks = provider.getTrendingTracks()
+            val tracks = provider.getTrendingTracks(languages)
             Result.success(tracks)
         } catch (e: Exception) {
             Result.failure(e)
