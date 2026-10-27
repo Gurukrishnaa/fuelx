@@ -1,13 +1,20 @@
 package com.fuelx.playback
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.fuelx.MainActivity
@@ -18,10 +25,40 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
 
+    companion object {
+        const val NOTIFICATION_CHANNEL_ID = "fuelx_playback_channel"
+    }
+
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Configure smooth network data source with generous timeouts & redirect support
+        // 1. Create Notification Channel required for Android 8.0+ through Android 11 Quick Settings
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "FuelX Music Playback",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "FuelX background music playback controls"
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.createNotificationChannel(channel)
+        }
+
+        // 2. Configure MediaNotificationProvider with the explicit notification channel
+        try {
+            setMediaNotificationProvider(
+                DefaultMediaNotificationProvider.Builder(this)
+                    .setChannelId(NOTIFICATION_CHANNEL_ID)
+                    .build()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 3. Configure smooth network data source with generous timeouts & redirect support
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
             .setConnectTimeoutMs(15_000)
@@ -31,7 +68,7 @@ class PlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(httpDataSourceFactory)
 
-        // 2. High-performance buffer control: prevents buffer starvation, pops, static, and distortion
+        // 4. High-performance buffer control: prevents buffer starvation, pops, static, and distortion
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs = */ 15_000,
@@ -43,8 +80,8 @@ class PlaybackService : MediaSessionService() {
             .setBackBuffer(/* backBufferDurationMs = */ 30_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
 
-        // 3. Configure the ExoPlayer audio engine
-        val player = ExoPlayer.Builder(this)
+        // 5. Configure the base ExoPlayer audio engine
+        val basePlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setAudioAttributes(
@@ -57,7 +94,62 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true) // Pauses automatically when headphones are unplugged
             .build()
 
-        // 2. PendingIntent to reopen FuelX when notification is tapped
+        // 6. Wrap in ForwardingPlayer so Android 11 Quick Settings notification and lockscreen
+        // permanently display the Next/Previous buttons and route skips to the active playlist
+        val forwardingPlayer = object : ForwardingPlayer(basePlayer) {
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands().buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
+            }
+
+            override fun isCommandAvailable(command: Int): Boolean {
+                return when (command) {
+                    Player.COMMAND_SEEK_TO_NEXT,
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                    Player.COMMAND_SEEK_TO_PREVIOUS,
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                        PlayerController.instance?.playlist?.isNotEmpty() == true
+                    }
+                    else -> super.isCommandAvailable(command)
+                }
+            }
+
+            override fun hasNextMediaItem(): Boolean {
+                return PlayerController.instance?.hasNext() ?: true
+            }
+
+            override fun hasPreviousMediaItem(): Boolean {
+                return PlayerController.instance?.hasPrevious() ?: true
+            }
+
+            override fun seekToNext() {
+                seekToNextMediaItem()
+            }
+
+            override fun seekToNextMediaItem() {
+                val handled = PlayerController.instance?.skipNext()
+                if (handled != true) {
+                    super.seekToNextMediaItem()
+                }
+            }
+
+            override fun seekToPrevious() {
+                seekToPreviousMediaItem()
+            }
+
+            override fun seekToPreviousMediaItem() {
+                val handled = PlayerController.instance?.skipPrevious()
+                if (handled != true) {
+                    super.seekToPreviousMediaItem()
+                }
+            }
+        }
+
+        // 7. PendingIntent to reopen FuelX when notification is tapped
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -65,9 +157,25 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 3. Build the MediaSession linking ExoPlayer to the Android OS
-        mediaSession = MediaSession.Builder(this, player)
+        // 8. Build the MediaSession linking ForwardingPlayer to the Android OS
+        mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setSessionActivity(sessionActivityPendingIntent)
+            .setCallback(object : MediaSession.Callback {
+                override fun onConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ): MediaSession.ConnectionResult {
+                    val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                        .add(Player.COMMAND_SEEK_TO_NEXT)
+                        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                        .build()
+                    return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                        .setAvailablePlayerCommands(availablePlayerCommands)
+                        .build()
+                }
+            })
             .build()
     }
 

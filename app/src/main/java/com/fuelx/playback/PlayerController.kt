@@ -56,14 +56,18 @@ class PlayerController(
     private val _playbackError = MutableStateFlow<String?>(null)
     val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
 
-    private var playlist: List<Track> = emptyList()
+    var playlist: List<Track> = emptyList()
+        private set
     private var autoRetryCount = 0
 
     companion object {
         private const val MAX_AUTO_RETRIES = 2
+        var instance: PlayerController? = null
+            private set
     }
 
     init {
+        instance = this
         // Restore last known state from storage into UI immediately
         val saved = preferences.getLastPlayback()
         if (saved != null) {
@@ -331,8 +335,11 @@ class PlayerController(
         preferences.savePositionOnly(positionMs)
     }
 
-    fun skipNext() {
-        if (playlist.isEmpty()) return
+    fun hasNext(): Boolean = playlist.isNotEmpty()
+    fun hasPrevious(): Boolean = playlist.isNotEmpty()
+
+    fun skipNext(): Boolean {
+        if (playlist.isEmpty()) return false
         val current = _currentTrack.value
         val currentIndex = playlist.indexOfFirst { it.id == current?.id }
         val nextIndex = if (currentIndex != -1 && currentIndex < playlist.size - 1) {
@@ -341,15 +348,16 @@ class PlayerController(
             0
         }
         playTrack(playlist[nextIndex], playlist)
+        return true
     }
 
-    fun skipPrevious() {
+    fun skipPrevious(): Boolean {
         val player = controller
         if (player != null && player.currentPosition > 3000L) {
             seekTo(0L)
-            return
+            return true
         }
-        if (playlist.isEmpty()) return
+        if (playlist.isEmpty()) return false
         val current = _currentTrack.value
         val currentIndex = playlist.indexOfFirst { it.id == current?.id }
         val prevIndex = if (currentIndex > 0) {
@@ -358,6 +366,7 @@ class PlayerController(
             playlist.size - 1
         }
         playTrack(playlist[prevIndex], playlist)
+        return true
     }
 
     fun retryPlayback() {
@@ -431,6 +440,9 @@ class PlayerController(
     }
 
     fun release() {
+        if (instance == this) {
+            instance = null
+        }
         positionJob?.cancel()
         scope.cancel()
         controller?.release()
