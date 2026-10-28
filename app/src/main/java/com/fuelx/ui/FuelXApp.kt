@@ -31,7 +31,6 @@ import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
 import com.fuelx.ui.library.LibraryScreen
 import com.fuelx.ui.library.PlaylistDetailScreen
-import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
@@ -102,7 +101,6 @@ fun FuelXApp() {
     val queue by playerController.queue.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
-    var isLyricsOpen by remember { mutableStateOf(false) }
 
     // Lyrics State
     var parsedLyrics by remember { mutableStateOf<ParsedLyrics?>(null) }
@@ -111,20 +109,16 @@ fun FuelXApp() {
     var lyricsRetryCount by remember { mutableIntStateOf(0) }
 
     // Intercept phone's System Back button:
-    // 1. If on Lyrics page -> close Lyrics to return to player
-    // 2. If on NowPlaying page -> collapse player to return to browsing
-    // 3. If on Playlist detail page -> return to Library
-    // 4. If on Search or Library tab -> return to Home tab
-    BackHandler(enabled = isLyricsOpen) {
-        isLyricsOpen = false
-    }
-    BackHandler(enabled = !isLyricsOpen && isNowPlayingOpen) {
+    // 1. If on NowPlaying page -> collapse player to return to browsing
+    // 2. If on Playlist detail page -> return to Library
+    // 3. If on Search or Library tab -> return to Home tab
+    BackHandler(enabled = isNowPlayingOpen) {
         isNowPlayingOpen = false
     }
-    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedPlaylist != null) {
+    BackHandler(enabled = !isNowPlayingOpen && selectedPlaylist != null) {
         selectedPlaylistId = null
     }
-    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedPlaylist == null && selectedTab != ScreenTab.HOME) {
+    BackHandler(enabled = !isNowPlayingOpen && selectedPlaylist == null && selectedTab != ScreenTab.HOME) {
         selectedTab = ScreenTab.HOME
     }
 
@@ -485,27 +479,14 @@ fun FuelXApp() {
                 onPreviousClick = { playerController.skipPrevious() },
                 onNextClick = { playerController.skipNext() },
                 onSeekTo = { newPos -> playerController.seekTo(newPos) },
-                onOpenLyrics = { isLyricsOpen = true },
+                parsedLyrics = parsedLyrics,
+                isLyricsLoading = isLyricsLoading,
+                lyricsError = lyricsError,
+                onRetryLyrics = { lyricsRetryCount++ },
                 onAddToPlaylist = {
                     currentTrack?.let { trackForPlaylistDialog = it }
                 },
                 onClose = { isNowPlayingOpen = false }
-            )
-        }
-
-        // Lyrics Screen Overlay
-        if (isLyricsOpen && currentTrack != null) {
-            LyricsScreen(
-                track = currentTrack!!,
-                parsedLyrics = parsedLyrics,
-                isLoading = isLyricsLoading,
-                errorMessage = lyricsError,
-                currentPositionMs = currentPositionMs,
-                onSeekTo = { targetMs ->
-                    playerController.seekTo(targetMs)
-                },
-                onRetry = { lyricsRetryCount++ },
-                onClose = { isLyricsOpen = false }
             )
         }
 
