@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -291,41 +292,93 @@ fun SearchScreen(
                                     )
                                 }
 
-                                IconButton(
-                                    onClick = { onAddToQueue(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                                        contentDescription = "Add to queue",
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                val fav = isFavorite(track.id)
+                                var showMenu by remember { mutableStateOf(false) }
 
-                                IconButton(
-                                    onClick = { onAddToPlaylist(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                                        contentDescription = "Add to playlist",
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Box {
+                                    IconButton(
+                                        onClick = { showMenu = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.MoreVert,
+                                            contentDescription = "Song options",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
 
-                                IconButton(
-                                    onClick = { onToggleFavorite(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    val fav = isFavorite(track.id)
-                                    Icon(
-                                        imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                        contentDescription = if (fav) "Remove favorite" else "Add favorite",
-                                        tint = if (fav) AccentPrimary else TextMuted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false },
+                                        modifier = Modifier.background(DarkSurfaceVariant)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = if (fav) "Remove Favorite" else "Favorite",
+                                                    color = if (fav) AccentPrimary else TextPrimary,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                                    contentDescription = null,
+                                                    tint = if (fav) AccentPrimary else TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            },
+                                            onClick = {
+                                                showMenu = false
+                                                onToggleFavorite(track)
+                                            }
+                                        )
+
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "Add to Queue",
+                                                    color = TextPrimary,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                                    contentDescription = null,
+                                                    tint = TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            },
+                                            onClick = {
+                                                showMenu = false
+                                                onAddToQueue(track)
+                                            }
+                                        )
+
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "Add to Playlist",
+                                                    color = TextPrimary,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                                    contentDescription = null,
+                                                    tint = TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            },
+                                            onClick = {
+                                                showMenu = false
+                                                onAddToPlaylist(track)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

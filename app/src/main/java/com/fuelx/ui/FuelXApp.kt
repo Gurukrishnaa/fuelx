@@ -392,6 +392,18 @@ fun FuelXApp() {
                                 isPlaying = isPlaying,
                                 isFavorite = { id -> favorites.any { it.id == id } },
                                 onToggleFavorite = onToggleFavorite,
+                                onAddToQueue = { track ->
+                                    playerController.addToQueue(track)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Added \"${track.title}\" to queue",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                },
+                                onAddToPlaylist = { track ->
+                                    trackForPlaylistDialog = track
+                                },
                                 onDeleteDownload = { track ->
                                     downloadManager.deleteDownload(track.id)
                                 },

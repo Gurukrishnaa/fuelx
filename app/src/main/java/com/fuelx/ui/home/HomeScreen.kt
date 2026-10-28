@@ -46,8 +46,8 @@ private val HOME_GENRES = listOf(
     HomeGenre("folk", "Folk & Indie")
 )
 
-// Maximum duration ceiling for individual songs (15 minutes). Longer tracks are multi-song mixes.
-private const val MAX_SONG_DURATION_MS = 15 * 60 * 1000L
+// Maximum duration ceiling for individual songs (10 minutes). Longer tracks are multi-song mixes.
+private const val MAX_SONG_DURATION_MS = 10 * 60 * 1000L
 
 @Composable
 fun HomeScreen(
@@ -180,12 +180,33 @@ fun HomeScreen(
         }
     }
 
-    // Filter tracks to ensure no mix/jukebox longer than 15 minutes is shown
+    // Filter tracks to ensure no mix/jukebox longer than 10 minutes or compilation videos are shown
+    val isHomeCleanSong: (Track) -> Boolean = { track ->
+        val dur = track.durationMs
+        val durOk = dur == null || (dur in 45_000L..MAX_SONG_DURATION_MS)
+        val titleLower = track.title.lowercase()
+        val artistLower = track.artist.lowercase()
+        val isMix = titleLower.contains("jukebox") ||
+                titleLower.contains("dj mix") ||
+                titleLower.contains("mix") ||
+                titleLower.contains("hit songs") ||
+                titleLower.contains("all songs") ||
+                titleLower.contains("collection") ||
+                titleLower.contains("non stop") ||
+                titleLower.contains("nonstop") ||
+                titleLower.contains("greatest hits") ||
+                titleLower.contains("full album") ||
+                artistLower.contains("video") ||
+                artistLower.contains("dj") ||
+                artistLower.contains("mix")
+        durOk && !isMix
+    }
+
     val cleanTracks = remember(tracks) {
-        tracks.filter { it.durationMs == null || it.durationMs <= MAX_SONG_DURATION_MS }
+        tracks.filter(isHomeCleanSong)
     }
     val cleanGenreTracks = remember(genreTracks) {
-        genreTracks.filter { it.durationMs == null || it.durationMs <= MAX_SONG_DURATION_MS }
+        genreTracks.filter(isHomeCleanSong)
     }
 
     // Top Songs slice (first 6 standalone hits)
@@ -616,43 +637,93 @@ private fun TrackListItem(
                 )
             }
 
-            // Queue button
-            IconButton(
-                onClick = onAddToQueue,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                    contentDescription = "Add to queue",
-                    tint = TextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            // 3-dots Overflow Menu with Queue, Playlist, and Favorite options
+            var showMenu by remember { mutableStateOf(false) }
 
-            // Playlist button
-            IconButton(
-                onClick = onAddToPlaylist,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                    contentDescription = "Add to playlist",
-                    tint = TextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "Song options",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            // Heart / Favorite button
-            IconButton(
-                onClick = onToggleFav,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = if (isFav) "Remove favorite" else "Add favorite",
-                    tint = if (isFav) AccentPrimary else TextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(DarkSurfaceVariant)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (isFav) "Remove Favorite" else "Favorite",
+                                color = if (isFav) AccentPrimary else TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = null,
+                                tint = if (isFav) AccentPrimary else TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onToggleFav()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Queue",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToQueue()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Playlist",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToPlaylist()
+                        }
+                    )
+                }
             }
         }
     }

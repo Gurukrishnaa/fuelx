@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -48,6 +49,8 @@ fun LibraryScreen(
     isPlaying: Boolean,
     isFavorite: (String) -> Boolean,
     onToggleFavorite: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit = {},
+    onAddToPlaylist: (Track) -> Unit = {},
     onDeleteDownload: (Track) -> Unit = {},
     onClearHistory: () -> Unit,
     onCreatePlaylist: (String) -> Unit = {},
@@ -471,6 +474,8 @@ fun LibraryScreen(
                                 isPlaying = isCurrent && isPlaying,
                                 isFav = true,
                                 onToggleFav = { onToggleFavorite(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, favorites) }
                             )
                         }
@@ -546,6 +551,8 @@ fun LibraryScreen(
                                 isPlaying = isCurrent && isPlaying,
                                 isFav = isFavorite(track.id),
                                 onToggleFav = { onToggleFavorite(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onDelete = { trackToDelete = track },
                                 onClick = { onTrackSelect(track, downloads) }
                             )
@@ -615,6 +622,8 @@ fun LibraryScreen(
                                 isPlaying = isCurrent && isPlaying,
                                 isFav = isFavorite(track.id),
                                 onToggleFav = { onToggleFavorite(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, history) }
                             )
                         }
@@ -706,6 +715,8 @@ private fun LibraryTrackItem(
     isPlaying: Boolean,
     isFav: Boolean,
     onToggleFav: () -> Unit,
+    onAddToQueue: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
@@ -799,29 +810,120 @@ private fun LibraryTrackItem(
                 )
             }
 
-            if (onDelete != null) {
+            // 3-dots Overflow Menu with Favorite, Queue, and Playlist options
+            var showMenu by remember { mutableStateOf(false) }
+
+            Box {
                 IconButton(
-                    onClick = onDelete,
+                    onClick = { showMenu = true },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.DeleteOutline,
-                        contentDescription = "Delete download",
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "Song options",
                         tint = TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
-            } else {
-                IconButton(
-                    onClick = onToggleFav,
-                    modifier = Modifier.size(36.dp)
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(DarkSurfaceVariant)
                 ) {
-                    Icon(
-                        imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = if (isFav) "Remove favorite" else "Add favorite",
-                        tint = if (isFav) AccentPrimary else TextMuted,
-                        modifier = Modifier.size(20.dp)
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (isFav) "Remove Favorite" else "Favorite",
+                                color = if (isFav) AccentPrimary else TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = null,
+                                tint = if (isFav) AccentPrimary else TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onToggleFav()
+                        }
                     )
+
+                    if (onAddToQueue != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Add to Queue",
+                                    color = TextPrimary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onAddToQueue()
+                            }
+                        )
+                    }
+
+                    if (onAddToPlaylist != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Add to Playlist",
+                                    color = TextPrimary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onAddToPlaylist()
+                            }
+                        )
+                    }
+
+                    if (onDelete != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Delete Download",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
+                        )
+                    }
                 }
             }
         }
