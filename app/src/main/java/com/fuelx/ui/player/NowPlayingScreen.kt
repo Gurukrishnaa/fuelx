@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fuelx.data.DownloadState
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
@@ -31,7 +32,10 @@ fun NowPlayingScreen(
     isBuffering: Boolean = false,
     isFavorite: Boolean = false,
     playbackError: String? = null,
+    downloadState: DownloadState = DownloadState.Idle,
     onToggleFavorite: () -> Unit = {},
+    onDownloadClick: () -> Unit = {},
+    onDeleteDownload: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
@@ -43,6 +47,7 @@ fun NowPlayingScreen(
 ) {
     var isShuffle by remember { mutableStateOf(false) }
     var isRepeat by remember { mutableStateOf(false) }
+    var showRemoveDownloadDialog by remember { mutableStateOf(false) }
 
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
@@ -115,7 +120,7 @@ fun NowPlayingScreen(
 
         // Large Album Art Box (intercepts touches so tapping cover never changes song)
         TrackArtwork(
-            artworkUrl = track.artworkUrl,
+            artworkUrl = track.displayArtwork,
             contentDescription = "${track.title} artwork",
             modifier = Modifier
                 .size(280.dp)
@@ -154,16 +159,69 @@ fun NowPlayingScreen(
                 )
             }
 
-            IconButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                    tint = if (isFavorite) AccentPrimary else TextSecondary,
-                    modifier = Modifier.size(28.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Download button
+                IconButton(
+                    onClick = {
+                        if (downloadState is DownloadState.Downloaded) {
+                            showRemoveDownloadDialog = true
+                        } else {
+                            onDownloadClick()
+                        }
+                    },
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    when (downloadState) {
+                        is DownloadState.Downloading -> {
+                            val p = (downloadState as DownloadState.Downloading).progress
+                            if (p in 0f..1f) {
+                                CircularProgressIndicator(
+                                    progress = { p },
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = AccentPrimary
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = AccentPrimary
+                                )
+                            }
+                        }
+                        is DownloadState.Downloaded -> {
+                            Icon(
+                                imageVector = Icons.Rounded.DownloadDone,
+                                contentDescription = "Downloaded offline",
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        else -> {
+                            Icon(
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = "Download for offline playback",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Favorite button
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (isFavorite) AccentPrimary else TextSecondary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
 
@@ -338,4 +396,41 @@ fun NowPlayingScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
     }
+
+    if (showRemoveDownloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveDownloadDialog = false },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "Remove Download?",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Text(
+                    text = "This will remove '${track.title}' from your offline downloads and free up storage space.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteDownload()
+                        showRemoveDownloadDialog = false
+                    }
+                ) {
+                    Text("Remove", color = AccentSecondary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveDownloadDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
 }
+

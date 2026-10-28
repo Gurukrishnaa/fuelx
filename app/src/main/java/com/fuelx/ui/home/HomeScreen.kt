@@ -268,7 +268,7 @@ private fun RecentTrackCard(
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             TrackArtwork(
-                artworkUrl = track.artworkUrl,
+                artworkUrl = track.displayArtwork,
                 contentDescription = "${track.title} artwork",
                 modifier = Modifier
                     .fillMaxWidth()
@@ -323,7 +323,7 @@ private fun TrackListItem(
                 contentAlignment = Alignment.Center
             ) {
                 TrackArtwork(
-                    artworkUrl = track.artworkUrl,
+                    artworkUrl = track.displayArtwork,
                     contentDescription = "${track.title} thumbnail",
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(8.dp),

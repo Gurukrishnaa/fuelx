@@ -50,15 +50,46 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             """.trimIndent()
         )
 
+        db.execSQL(
+            """
+            CREATE TABLE $TABLE_DOWNLOADS (
+                $COL_TRACK_ID TEXT PRIMARY KEY,
+                $COL_TITLE TEXT NOT NULL,
+                $COL_ARTIST TEXT NOT NULL,
+                $COL_ALBUM TEXT,
+                $COL_DURATION_MS INTEGER,
+                $COL_ARTWORK_URL TEXT,
+                $COL_LOCAL_FILE_PATH TEXT NOT NULL,
+                $COL_LOCAL_ARTWORK_PATH TEXT,
+                $COL_DOWNLOADED_AT INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
         db.execSQL("CREATE INDEX idx_history_played_at ON $TABLE_HISTORY($COL_PLAYED_AT DESC)")
         db.execSQL("CREATE INDEX idx_history_track_id ON $TABLE_HISTORY($COL_TRACK_ID)")
+        db.execSQL("CREATE INDEX idx_downloads_downloaded_at ON $TABLE_DOWNLOADS($COL_DOWNLOADED_AT DESC)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Drop and recreate if schema changes in future versions
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_FAVORITES")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_HISTORY")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $TABLE_DOWNLOADS (
+                    $COL_TRACK_ID TEXT PRIMARY KEY,
+                    $COL_TITLE TEXT NOT NULL,
+                    $COL_ARTIST TEXT NOT NULL,
+                    $COL_ALBUM TEXT,
+                    $COL_DURATION_MS INTEGER,
+                    $COL_ARTWORK_URL TEXT,
+                    $COL_LOCAL_FILE_PATH TEXT NOT NULL,
+                    $COL_LOCAL_ARTWORK_PATH TEXT,
+                    $COL_DOWNLOADED_AT INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_downloads_downloaded_at ON $TABLE_DOWNLOADS($COL_DOWNLOADED_AT DESC)")
+        }
     }
 
     // --- FAVORITES OPERATIONS ---
@@ -237,12 +268,150 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
         db.delete(TABLE_HISTORY, null, null)
     }
 
+    // --- DOWNLOADS OPERATIONS ---
+
+    fun insertDownload(
+        track: Track,
+        localFilePath: String,
+        localArtworkPath: String?,
+        downloadedAtMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put(COL_TRACK_ID, track.id)
+            put(COL_TITLE, track.title)
+            put(COL_ARTIST, track.artist)
+            put(COL_ALBUM, track.album)
+            put(COL_DURATION_MS, track.durationMs ?: 0L)
+            put(COL_ARTWORK_URL, track.artworkUrl)
+            put(COL_LOCAL_FILE_PATH, localFilePath)
+            put(COL_LOCAL_ARTWORK_PATH, localArtworkPath)
+            put(COL_DOWNLOADED_AT, downloadedAtMs)
+        }
+        val result = db.insertWithOnConflict(
+            TABLE_DOWNLOADS,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+        return result != -1L
+    }
+
+    fun deleteDownload(trackId: String): Boolean {
+        val db = writableDatabase
+        val rows = db.delete(TABLE_DOWNLOADS, "$COL_TRACK_ID = ?", arrayOf(trackId))
+        return rows > 0
+    }
+
+    fun getAllDownloads(): List<Track> {
+        val list = mutableListOf<Track>()
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_DOWNLOADS,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "$COL_DOWNLOADED_AT DESC"
+        )
+        cursor.use {
+            val idIdx = it.getColumnIndexOrThrow(COL_TRACK_ID)
+            val titleIdx = it.getColumnIndexOrThrow(COL_TITLE)
+            val artistIdx = it.getColumnIndexOrThrow(COL_ARTIST)
+            val albumIdx = it.getColumnIndexOrThrow(COL_ALBUM)
+            val durationIdx = it.getColumnIndexOrThrow(COL_DURATION_MS)
+            val artworkIdx = it.getColumnIndexOrThrow(COL_ARTWORK_URL)
+            val filePathIdx = it.getColumnIndexOrThrow(COL_LOCAL_FILE_PATH)
+            val artPathIdx = it.getColumnIndexOrThrow(COL_LOCAL_ARTWORK_PATH)
+
+            while (it.moveToNext()) {
+                val trackId = it.getString(idIdx)
+                val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
+                val artwork = it.getString(artworkIdx)
+                val localPath = it.getString(filePathIdx)
+                val localArt = it.getString(artPathIdx)
+
+                list.add(
+                    Track(
+                        id = trackId,
+                        title = it.getString(titleIdx),
+                        artist = it.getString(artistIdx),
+                        album = it.getString(albumIdx),
+                        artworkUrl = artwork,
+                        durationMs = duration,
+                        streamUri = null,
+                        localFilePath = localPath,
+                        localArtworkPath = localArt
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun getDownloadedTrack(trackId: String): Track? {
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_DOWNLOADS,
+            null,
+            "$COL_TRACK_ID = ?",
+            arrayOf(trackId),
+            null,
+            null,
+            null
+        )
+        cursor.use {
+            if (it.moveToFirst()) {
+                val idIdx = it.getColumnIndexOrThrow(COL_TRACK_ID)
+                val titleIdx = it.getColumnIndexOrThrow(COL_TITLE)
+                val artistIdx = it.getColumnIndexOrThrow(COL_ARTIST)
+                val albumIdx = it.getColumnIndexOrThrow(COL_ALBUM)
+                val durationIdx = it.getColumnIndexOrThrow(COL_DURATION_MS)
+                val artworkIdx = it.getColumnIndexOrThrow(COL_ARTWORK_URL)
+                val filePathIdx = it.getColumnIndexOrThrow(COL_LOCAL_FILE_PATH)
+                val artPathIdx = it.getColumnIndexOrThrow(COL_LOCAL_ARTWORK_PATH)
+
+                val duration = it.getLong(durationIdx).takeIf { d -> d > 0 }
+                return Track(
+                    id = it.getString(idIdx),
+                    title = it.getString(titleIdx),
+                    artist = it.getString(artistIdx),
+                    album = it.getString(albumIdx),
+                    artworkUrl = it.getString(artworkIdx),
+                    durationMs = duration,
+                    streamUri = null,
+                    localFilePath = it.getString(filePathIdx),
+                    localArtworkPath = it.getString(artPathIdx)
+                )
+            }
+        }
+        return null
+    }
+
+    fun isDownloaded(trackId: String): Boolean {
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_DOWNLOADS,
+            arrayOf(COL_TRACK_ID),
+            "$COL_TRACK_ID = ?",
+            arrayOf(trackId),
+            null,
+            null,
+            null
+        )
+        cursor.use {
+            return it.count > 0
+        }
+    }
+
     companion object {
         const val DATABASE_NAME = "fuelx_library.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         const val TABLE_FAVORITES = "favorites"
         const val TABLE_HISTORY = "history"
+        const val TABLE_DOWNLOADS = "downloads"
 
         const val COL_ID = "id"
         const val COL_TRACK_ID = "track_id"
@@ -252,8 +421,11 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_DURATION_MS = "duration_ms"
         const val COL_ARTWORK_URL = "artwork_url"
         const val COL_STREAM_URI = "stream_uri"
+        const val COL_LOCAL_FILE_PATH = "local_file_path"
+        const val COL_LOCAL_ARTWORK_PATH = "local_artwork_path"
         const val COL_ADDED_AT = "added_at"
         const val COL_PLAYED_AT = "played_at"
+        const val COL_DOWNLOADED_AT = "downloaded_at"
 
         const val MAX_HISTORY_ITEMS = 100
     }

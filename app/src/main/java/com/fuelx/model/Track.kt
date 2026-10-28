@@ -7,8 +7,16 @@ data class Track(
     val album: String? = null,
     val artworkUrl: String? = null,
     val durationMs: Long? = null,
-    val streamUri: String? = null
+    val streamUri: String? = null,
+    val localFilePath: String? = null,
+    val localArtworkPath: String? = null
 ) {
+    val isDownloaded: Boolean
+        get() = !localFilePath.isNullOrBlank()
+
+    val displayArtwork: String?
+        get() = localArtworkPath ?: artworkUrl
+
     val formattedDuration: String?
         get() {
             val dur = durationMs ?: return null

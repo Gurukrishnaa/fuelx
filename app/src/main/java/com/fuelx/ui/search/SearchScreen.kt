@@ -250,7 +250,7 @@ fun SearchScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 TrackArtwork(
-                                    artworkUrl = track.artworkUrl,
+                                    artworkUrl = track.displayArtwork,
                                     contentDescription = "${track.title} artwork",
                                     modifier = Modifier.size(42.dp),
                                     shape = RoundedCornerShape(8.dp),

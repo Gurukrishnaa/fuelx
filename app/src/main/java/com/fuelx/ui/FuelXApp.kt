@@ -19,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import com.fuelx.data.DefaultLibraryRepository
 import com.fuelx.data.DefaultLyricsRepository
 import com.fuelx.data.DefaultMusicRepository
+import com.fuelx.data.DownloadState
 import com.fuelx.data.PlaybackPreferences
+import com.fuelx.data.TrackDownloadManager
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
 import com.fuelx.ui.components.LanguageSelectionDialog
@@ -45,6 +47,7 @@ fun FuelXApp() {
     val repository = remember { DefaultMusicRepository() }
     val lyricsRepository = remember { DefaultLyricsRepository() }
     val libraryRepository = remember { DefaultLibraryRepository.getInstance(context) }
+    val downloadManager = remember { TrackDownloadManager.getInstance(context, repository, libraryRepository) }
     val playerController = remember { PlayerController(context, repository, libraryRepository) }
     val networkMonitor = remember { NetworkMonitor(context) }
     val isOnline by networkMonitor.isOnline.collectAsState()
@@ -56,6 +59,8 @@ fun FuelXApp() {
     var showLanguageDialog by remember { mutableStateOf(!preferences.isLanguagePreferenceSet()) }
 
     val favorites by libraryRepository.favorites.collectAsState()
+    val downloads by libraryRepository.downloads.collectAsState()
+    val downloadStates by downloadManager.downloadStates.collectAsState()
     val history by libraryRepository.history.collectAsState()
 
     val onToggleFavorite: (Track) -> Unit = { track ->
@@ -308,11 +313,15 @@ fun FuelXApp() {
                     ScreenTab.LIBRARY -> {
                         LibraryScreen(
                             favorites = favorites,
+                            downloads = downloads,
                             history = history,
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
                             isFavorite = { id -> favorites.any { it.id == id } },
                             onToggleFavorite = onToggleFavorite,
+                            onDeleteDownload = { track ->
+                                downloadManager.deleteDownload(track.id)
+                            },
                             onClearHistory = {
                                 coroutineScope.launch {
                                     libraryRepository.clearHistory()
@@ -331,6 +340,13 @@ fun FuelXApp() {
 
         // Full Screen Now Playing Overlay
         if (isNowPlayingOpen && currentTrack != null) {
+            val trackId = currentTrack!!.id
+            val currentDownloadState = downloadStates[trackId] ?: if (downloadManager.isDownloaded(trackId)) {
+                DownloadState.Downloaded
+            } else {
+                DownloadState.Idle
+            }
+
             NowPlayingScreen(
                 track = currentTrack!!,
                 isPlaying = isPlaying,
@@ -342,6 +358,13 @@ fun FuelXApp() {
                 isFavorite = favorites.any { it.id == currentTrack?.id },
                 onToggleFavorite = {
                     currentTrack?.let { onToggleFavorite(it) }
+                },
+                downloadState = currentDownloadState,
+                onDownloadClick = {
+                    currentTrack?.let { downloadManager.downloadTrack(it) }
+                },
+                onDeleteDownload = {
+                    currentTrack?.let { downloadManager.deleteDownload(it.id) }
                 },
                 onPlayPauseClick = { playerController.togglePlayPause() },
                 onPreviousClick = { playerController.skipPrevious() },

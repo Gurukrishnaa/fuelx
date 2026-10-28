@@ -160,6 +160,12 @@ class PlayerController(
                 val current = _currentTrack.value
                 val pos = player.currentPosition.coerceAtLeast(0L)
 
+                // If currently playing a downloaded offline track, don't attempt network stream resolution
+                if (current != null && current.isDownloaded) {
+                    _playbackError.value = "Playback error: ${error.localizedMessage ?: "Local file unreadable"}"
+                    return
+                }
+
                 // Attempt auto-recovery if within retry budget (handles stream expiration / token timeout / 403)
                 if (current != null && autoRetryCount < MAX_AUTO_RETRIES) {
                     autoRetryCount++
@@ -268,6 +274,68 @@ class PlayerController(
         }
 
         scope.launch {
+            // First check if track is available locally on disk for zero-latency offline playback
+            val downloadedTrack = if (track.isDownloaded) track else libraryRepository.getDownloadedTrack(track.id)
+            var localPath = downloadedTrack?.localFilePath
+            var localFile = if (!localPath.isNullOrBlank()) java.io.File(localPath) else null
+
+            // Fallback check in downloads directory if database path wasn't found or moved
+            if (localFile == null || !localFile.exists() || localFile.length() == 0L) {
+                val downloadsDir = java.io.File(context.filesDir, "downloads")
+                val fallbackM4a = java.io.File(downloadsDir, "${track.id}.m4a")
+                val fallbackWebm = java.io.File(downloadsDir, "${track.id}.webm")
+                if (fallbackM4a.exists() && fallbackM4a.length() > 0L) {
+                    localFile = fallbackM4a
+                    localPath = fallbackM4a.absolutePath
+                } else if (fallbackWebm.exists() && fallbackWebm.length() > 0L) {
+                    localFile = fallbackWebm
+                    localPath = fallbackWebm.absolutePath
+                }
+            }
+
+            if (localFile != null && localFile.exists() && localFile.length() > 0) {
+                val player = controller
+                if (player == null) {
+                    _isBuffering.value = false
+                    _playbackError.value = "Audio player not ready"
+                    return@launch
+                }
+
+                val effectiveTrack = (downloadedTrack ?: track).copy(localFilePath = localPath)
+                if (effectiveTrack.durationMs != null && effectiveTrack.durationMs > 0L) {
+                    _durationMs.value = effectiveTrack.durationMs
+                }
+                _currentTrack.value = effectiveTrack
+
+                val artUri = when {
+                    !effectiveTrack.artworkUrl.isNullOrBlank() -> Uri.parse(effectiveTrack.artworkUrl)
+                    !effectiveTrack.localArtworkPath.isNullOrBlank() && java.io.File(effectiveTrack.localArtworkPath).exists() -> {
+                        Uri.fromFile(java.io.File(effectiveTrack.localArtworkPath))
+                    }
+                    else -> null
+                }
+
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(effectiveTrack.title)
+                    .setArtist(effectiveTrack.artist)
+                    .setAlbumTitle(effectiveTrack.album)
+                    .setArtworkUri(artUri)
+                    .build()
+
+                // Omit hardcoded setMimeType so ExoPlayer's extractors auto-detect container (m4a/aac or webm/opus) from file headers
+                val mediaItem = MediaItem.Builder()
+                    .setMediaId(effectiveTrack.id)
+                    .setUri(Uri.fromFile(localFile))
+                    .setMediaMetadata(metadata)
+                    .build()
+
+                player.setMediaItem(mediaItem, /* startPositionMs = */ 0L)
+                player.prepare()
+                player.play()
+                return@launch
+            }
+
+            // Stream online via repository
             val streamInfo = if (track.streamUri != null) {
                 null
             } else {

@@ -10,6 +10,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -65,8 +66,11 @@ class PlaybackService : MediaSessionService() {
             .setReadTimeoutMs(20_000)
             .setAllowCrossProtocolRedirects(true)
 
+        // Wrap in DefaultDataSource so both remote HTTP/HTTPS streams and local offline files (file://) play seamlessly
+        val defaultDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpDataSourceFactory)
+            .setDataSourceFactory(defaultDataSourceFactory)
 
         // 4. High-performance buffer control: prevents buffer starvation, pops, static, and distortion
         val loadControl = DefaultLoadControl.Builder()

@@ -5,9 +5,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,17 +31,20 @@ import com.fuelx.ui.theme.*
 
 enum class LibraryTab {
     FAVORITES,
+    DOWNLOADS,
     HISTORY
 }
 
 @Composable
 fun LibraryScreen(
     favorites: List<Track>,
+    downloads: List<Track> = emptyList(),
     history: List<Track>,
     currentTrack: Track?,
     isPlaying: Boolean,
     isFavorite: (String) -> Boolean,
     onToggleFavorite: (Track) -> Unit,
+    onDeleteDownload: (Track) -> Unit = {},
     onClearHistory: () -> Unit,
     onTrackSelect: (Track, List<Track>) -> Unit,
     onBackClick: () -> Unit,
@@ -47,6 +52,7 @@ fun LibraryScreen(
 ) {
     var selectedTab by remember { mutableStateOf(LibraryTab.FAVORITES) }
     var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var trackToDelete by remember { mutableStateOf<Track?>(null) }
 
     Column(
         modifier = modifier
@@ -79,12 +85,14 @@ fun LibraryScreen(
             )
         }
 
-        // Tab Selection Chips
+        // Tab Selection Chips (horizontally scrollable, prevents squishing and height blowout)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
                 selected = selectedTab == LibraryTab.FAVORITES,
@@ -113,6 +121,37 @@ fun LibraryScreen(
                     enabled = true,
                     selected = selectedTab == LibraryTab.FAVORITES,
                     borderColor = if (selectedTab == LibraryTab.FAVORITES) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+
+            FilterChip(
+                selected = selectedTab == LibraryTab.DOWNLOADS,
+                onClick = { selectedTab = LibraryTab.DOWNLOADS },
+                label = {
+                    Text(
+                        text = "Downloads (${downloads.size})",
+                        fontWeight = if (selectedTab == LibraryTab.DOWNLOADS) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.DownloadDone,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (selectedTab == LibraryTab.DOWNLOADS) AccentPrimary else TextSecondary
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = AccentPrimary.copy(alpha = 0.18f),
+                    selectedLabelColor = AccentPrimary,
+                    containerColor = DarkSurface,
+                    labelColor = TextSecondary
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selectedTab == LibraryTab.DOWNLOADS,
+                    borderColor = if (selectedTab == LibraryTab.DOWNLOADS) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
                 ),
                 shape = RoundedCornerShape(20.dp)
             )
@@ -227,6 +266,82 @@ fun LibraryScreen(
                 }
             }
 
+            LibraryTab.DOWNLOADS -> {
+                if (downloads.isEmpty()) {
+                    EmptyLibraryView(
+                        icon = Icons.Rounded.DownloadDone,
+                        title = "No downloaded tracks",
+                        subtitle = "Tap the download icon while playing any song to save it for offline listening."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 90.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            // Action row: Play All & Shuffle
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { onTrackSelect(downloads.first(), downloads) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary),
+                                        shape = RoundedCornerShape(20.dp),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.PlayArrow,
+                                            contentDescription = null,
+                                            tint = DarkBackground,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Play All", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            val shuffled = downloads.shuffled()
+                                            onTrackSelect(shuffled.first(), shuffled)
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                        shape = RoundedCornerShape(20.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Shuffle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Shuffle")
+                                    }
+                                }
+                            }
+                        }
+
+                        items(downloads, key = { it.id }) { track ->
+                            val isCurrent = track.id == currentTrack?.id
+                            LibraryTrackItem(
+                                track = track,
+                                isCurrent = isCurrent,
+                                isPlaying = isCurrent && isPlaying,
+                                isFav = isFavorite(track.id),
+                                onToggleFav = { onToggleFavorite(track) },
+                                onDelete = { trackToDelete = track },
+                                onClick = { onTrackSelect(track, downloads) }
+                            )
+                        }
+                    }
+                }
+            }
+
             LibraryTab.HISTORY -> {
                 if (history.isEmpty()) {
                     EmptyLibraryView(
@@ -333,6 +448,43 @@ fun LibraryScreen(
             }
         )
     }
+
+    // Confirmation dialog for deleting a downloaded track
+    trackToDelete?.let { track ->
+        AlertDialog(
+            onDismissRequest = { trackToDelete = null },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "Delete Download?",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Text(
+                    text = "Remove '${track.title}' from your downloaded songs? You won't be able to play it offline until downloaded again.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteDownload(track)
+                        trackToDelete = null
+                    }
+                ) {
+                    Text("Delete", color = AccentSecondary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { trackToDelete = null }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -342,6 +494,7 @@ private fun LibraryTrackItem(
     isPlaying: Boolean,
     isFav: Boolean,
     onToggleFav: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Card(
@@ -365,7 +518,7 @@ private fun LibraryTrackItem(
                 contentAlignment = Alignment.Center
             ) {
                 TrackArtwork(
-                    artworkUrl = track.artworkUrl,
+                    artworkUrl = track.displayArtwork,
                     contentDescription = "${track.title} artwork",
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(8.dp),
@@ -404,13 +557,24 @@ private fun LibraryTrackItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (track.isDownloaded || onDelete != null) {
+                        Icon(
+                            imageVector = Icons.Rounded.DownloadDone,
+                            contentDescription = "Downloaded",
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             // Duration (only rendered when known)
@@ -423,17 +587,30 @@ private fun LibraryTrackItem(
                 )
             }
 
-            // Heart / Favorite Icon button
-            IconButton(
-                onClick = onToggleFav,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    contentDescription = if (isFav) "Remove favorite" else "Add favorite",
-                    tint = if (isFav) AccentPrimary else TextMuted,
-                    modifier = Modifier.size(20.dp)
-                )
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "Delete download",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = onToggleFav,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        contentDescription = if (isFav) "Remove favorite" else "Add favorite",
+                        tint = if (isFav) AccentPrimary else TextMuted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

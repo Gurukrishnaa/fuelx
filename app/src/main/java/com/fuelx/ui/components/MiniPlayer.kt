@@ -49,7 +49,7 @@ fun MiniPlayer(
         ) {
             // Album art thumbnail
             TrackArtwork(
-                artworkUrl = currentTrack.artworkUrl,
+                artworkUrl = currentTrack.displayArtwork,
                 contentDescription = "${currentTrack.title} thumbnail",
                 modifier = Modifier.size(46.dp),
                 shape = RoundedCornerShape(10.dp),
