@@ -254,7 +254,7 @@ fun NowPlayingScreen(
                             text = playbackError,
                             style = MaterialTheme.typography.bodySmall,
                             color = TextPrimary,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }

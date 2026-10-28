@@ -2,6 +2,8 @@ package com.fuelx.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -37,6 +39,15 @@ class PlayerController(
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var controller: MediaController? = null
     private var positionJob: Job? = null
+    private var playJob: Job? = null
+
+    fun isNetworkAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
     val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
@@ -166,6 +177,15 @@ class PlayerController(
                     return
                 }
 
+                // If offline, stop player and display clear network message immediately without looping
+                if (!isNetworkAvailable()) {
+                    player.stop()
+                    player.clearMediaItems()
+                    _isPlaying.value = false
+                    _playbackError.value = "Playback error: No internet connection. Download tracks to listen offline."
+                    return
+                }
+
                 // Attempt auto-recovery if within retry budget (handles stream expiration / token timeout / 403)
                 if (current != null && autoRetryCount < MAX_AUTO_RETRIES) {
                     autoRetryCount++
@@ -198,10 +218,16 @@ class PlayerController(
                                 return@launch
                             }
                         }
+                        player.stop()
+                        player.clearMediaItems()
                         _isBuffering.value = false
+                        _isPlaying.value = false
                         _playbackError.value = "Playback error: ${error.localizedMessage ?: "Failed to recover stream"}"
                     }
                 } else {
+                    player.stop()
+                    player.clearMediaItems()
+                    _isPlaying.value = false
                     _playbackError.value = "Playback error: ${error.localizedMessage ?: "Network or stream issue"}"
                 }
             }
@@ -255,8 +281,24 @@ class PlayerController(
         player.pause() // Stays paused at exact saved point
     }
 
-    fun playTrack(track: Track, tracks: List<Track> = playlist) {
+    fun playTrack(track: Track, tracks: List<Track> = playlist, forceRestart: Boolean = false) {
         this.playlist = tracks
+        val player = controller
+
+        // If the exact same track is already active and loaded in ExoPlayer without errors,
+        // do NOT restart from 0:00! Keep playing or resume seamlessly from the current position.
+        if (!forceRestart && player != null && _currentTrack.value?.id == track.id && player.currentMediaItem?.mediaId == track.id && _playbackError.value == null) {
+            if (!player.isPlaying) {
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
+                player.play()
+            }
+            return
+        }
+
+        // Cancel any pending playback or stream resolution jobs to prevent race conditions
+        playJob?.cancel()
         // Immediately halt position updates without saving previous song's position
         stopPositionUpdates(saveCurrentPlayerPosition = false)
         controller?.pause()
@@ -273,14 +315,14 @@ class PlayerController(
             libraryRepository.recordHistory(track)
         }
 
-        scope.launch {
+        playJob = scope.launch {
             // First check if track is available locally on disk for zero-latency offline playback
             val downloadedTrack = if (track.isDownloaded) track else libraryRepository.getDownloadedTrack(track.id)
             var localPath = downloadedTrack?.localFilePath
             var localFile = if (!localPath.isNullOrBlank()) java.io.File(localPath) else null
 
             // Fallback check in downloads directory if database path wasn't found or moved
-            if (localFile == null || !localFile.exists() || localFile.length() == 0L) {
+            if (track.id.isNotBlank() && (localFile == null || !localFile.exists() || localFile.length() == 0L)) {
                 val downloadsDir = java.io.File(context.filesDir, "downloads")
                 val fallbackM4a = java.io.File(downloadsDir, "${track.id}.m4a")
                 val fallbackWebm = java.io.File(downloadsDir, "${track.id}.webm")
@@ -308,10 +350,10 @@ class PlayerController(
                 _currentTrack.value = effectiveTrack
 
                 val artUri = when {
-                    !effectiveTrack.artworkUrl.isNullOrBlank() -> Uri.parse(effectiveTrack.artworkUrl)
                     !effectiveTrack.localArtworkPath.isNullOrBlank() && java.io.File(effectiveTrack.localArtworkPath).exists() -> {
                         Uri.fromFile(java.io.File(effectiveTrack.localArtworkPath))
                     }
+                    !effectiveTrack.artworkUrl.isNullOrBlank() -> Uri.parse(effectiveTrack.artworkUrl)
                     else -> null
                 }
 
@@ -335,6 +377,17 @@ class PlayerController(
                 return@launch
             }
 
+            // Track is NOT downloaded: if offline, stop audio engine and clear stale media items immediately
+            if (!isNetworkAvailable()) {
+                val player = controller
+                player?.stop()
+                player?.clearMediaItems()
+                _isBuffering.value = false
+                _isPlaying.value = false
+                _playbackError.value = "This song is not downloaded. Connect to the internet or download it first for offline playback."
+                return@launch
+            }
+
             // Stream online via repository
             val streamInfo = if (track.streamUri != null) {
                 null
@@ -343,7 +396,11 @@ class PlayerController(
                 if (result.isSuccess) {
                     result.getOrNull()
                 } else {
+                    val player = controller
+                    player?.stop()
+                    player?.clearMediaItems()
                     _isBuffering.value = false
+                    _isPlaying.value = false
                     _playbackError.value = "Unable to resolve stream: ${result.exceptionOrNull()?.message}"
                     return@launch
                 }
@@ -385,10 +442,21 @@ class PlayerController(
 
     fun togglePlayPause() {
         val player = controller ?: return
+        val current = _currentTrack.value
+
         if (player.isPlaying) {
             player.pause()
             preferences.savePositionOnly(player.currentPosition)
         } else {
+            // If there is an active error, or no media item loaded, or the loaded item does not match the active track,
+            // re-trigger playTrack for the current track rather than resuming a stale/mismatched media item
+            if (_playbackError.value != null || player.currentMediaItem == null || player.currentMediaItem?.mediaId != current?.id) {
+                if (current != null) {
+                    playTrack(current, playlist)
+                }
+                return
+            }
+
             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                 player.prepare()
             }
@@ -415,7 +483,7 @@ class PlayerController(
         } else {
             0
         }
-        playTrack(playlist[nextIndex], playlist)
+        playTrack(playlist[nextIndex], playlist, forceRestart = true)
         return true
     }
 
@@ -433,7 +501,7 @@ class PlayerController(
         } else {
             playlist.size - 1
         }
-        playTrack(playlist[prevIndex], playlist)
+        playTrack(playlist[prevIndex], playlist, forceRestart = true)
         return true
     }
 
@@ -441,7 +509,7 @@ class PlayerController(
         val current = _currentTrack.value ?: return
         _playbackError.value = null
         autoRetryCount = 0
-        playTrack(current, playlist)
+        playTrack(current, playlist, forceRestart = true)
     }
 
     fun clearError() {
@@ -511,6 +579,7 @@ class PlayerController(
         if (instance == this) {
             instance = null
         }
+        playJob?.cancel()
         positionJob?.cancel()
         scope.cancel()
         controller?.release()
