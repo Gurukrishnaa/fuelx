@@ -22,12 +22,15 @@ import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.DownloadState
 import com.fuelx.data.PlaybackPreferences
 import com.fuelx.data.TrackDownloadManager
+import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
+import com.fuelx.ui.components.AddToPlaylistDialog
 import com.fuelx.ui.components.LanguageSelectionDialog
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
 import com.fuelx.ui.library.LibraryScreen
+import com.fuelx.ui.library.PlaylistDetailScreen
 import com.fuelx.ui.lyrics.LyricsScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
@@ -62,6 +65,13 @@ fun FuelXApp() {
     val downloads by libraryRepository.downloads.collectAsState()
     val downloadStates by downloadManager.downloadStates.collectAsState()
     val history by libraryRepository.history.collectAsState()
+    val playlists by libraryRepository.playlists.collectAsState()
+
+    var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
+    val selectedPlaylist = remember(playlists, selectedPlaylistId) {
+        playlists.find { it.id == selectedPlaylistId }
+    }
+    var trackForPlaylistDialog by remember { mutableStateOf<Track?>(null) }
 
     val onToggleFavorite: (Track) -> Unit = { track ->
         coroutineScope.launch {
@@ -103,14 +113,18 @@ fun FuelXApp() {
     // Intercept phone's System Back button:
     // 1. If on Lyrics page -> close Lyrics to return to player
     // 2. If on NowPlaying page -> collapse player to return to browsing
-    // 3. If on Search or Library tab -> return to Home tab
+    // 3. If on Playlist detail page -> return to Library
+    // 4. If on Search or Library tab -> return to Home tab
     BackHandler(enabled = isLyricsOpen) {
         isLyricsOpen = false
     }
     BackHandler(enabled = !isLyricsOpen && isNowPlayingOpen) {
         isNowPlayingOpen = false
     }
-    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedTab != ScreenTab.HOME) {
+    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedPlaylist != null) {
+        selectedPlaylistId = null
+    }
+    BackHandler(enabled = !isLyricsOpen && !isNowPlayingOpen && selectedPlaylist == null && selectedTab != ScreenTab.HOME) {
         selectedTab = ScreenTab.HOME
     }
 
@@ -299,6 +313,9 @@ fun FuelXApp() {
                                     )
                                 }
                             },
+                            onAddToPlaylist = { track ->
+                                trackForPlaylistDialog = track
+                            },
                             isLoading = isTrendingLoading,
                             errorMessage = trendingError,
                             onRetry = { retryCount++ },
@@ -314,6 +331,18 @@ fun FuelXApp() {
                             currentTrack = currentTrack,
                             isFavorite = { id -> favorites.any { it.id == id } },
                             onToggleFavorite = onToggleFavorite,
+                            onAddToQueue = { track ->
+                                playerController.addToQueue(track)
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Added \"${track.title}\" to queue",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            },
+                            onAddToPlaylist = { track ->
+                                trackForPlaylistDialog = track
+                            },
                             onTrackSelect = { track, list ->
                                 playerController.playTrack(track, list)
                                 isNowPlayingOpen = true
@@ -322,28 +351,87 @@ fun FuelXApp() {
                         )
                     }
                     ScreenTab.LIBRARY -> {
-                        LibraryScreen(
-                            favorites = favorites,
-                            downloads = downloads,
-                            history = history,
-                            currentTrack = currentTrack,
-                            isPlaying = isPlaying,
-                            isFavorite = { id -> favorites.any { it.id == id } },
-                            onToggleFavorite = onToggleFavorite,
-                            onDeleteDownload = { track ->
-                                downloadManager.deleteDownload(track.id)
-                            },
-                            onClearHistory = {
-                                coroutineScope.launch {
-                                    libraryRepository.clearHistory()
-                                }
-                            },
-                            onTrackSelect = { track, list ->
-                                playerController.playTrack(track, list)
-                                isNowPlayingOpen = true
-                            },
-                            onBackClick = { selectedTab = ScreenTab.HOME }
-                        )
+                        if (selectedPlaylist != null) {
+                            PlaylistDetailScreen(
+                                playlist = selectedPlaylist,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onPlayTrack = { track, list ->
+                                    playerController.playTrack(track, list)
+                                    isNowPlayingOpen = true
+                                },
+                                onRemoveTrack = { trackId ->
+                                    coroutineScope.launch {
+                                        libraryRepository.removeTrackFromPlaylist(selectedPlaylist.id, trackId)
+                                        snackbarHostState.showSnackbar("Removed from playlist", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onDeletePlaylist = {
+                                    val id = selectedPlaylist.id
+                                    selectedPlaylistId = null
+                                    coroutineScope.launch {
+                                        libraryRepository.deletePlaylist(id)
+                                        snackbarHostState.showSnackbar("Playlist deleted", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onRenamePlaylist = { newName ->
+                                    coroutineScope.launch {
+                                        libraryRepository.renamePlaylist(selectedPlaylist.id, newName)
+                                        snackbarHostState.showSnackbar("Playlist renamed", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onBackClick = { selectedPlaylistId = null }
+                            )
+                        } else {
+                            LibraryScreen(
+                                playlists = playlists,
+                                favorites = favorites,
+                                downloads = downloads,
+                                history = history,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                isFavorite = { id -> favorites.any { it.id == id } },
+                                onToggleFavorite = onToggleFavorite,
+                                onDeleteDownload = { track ->
+                                    downloadManager.deleteDownload(track.id)
+                                },
+                                onClearHistory = {
+                                    coroutineScope.launch {
+                                        libraryRepository.clearHistory()
+                                    }
+                                },
+                                onCreatePlaylist = { name ->
+                                    coroutineScope.launch {
+                                        libraryRepository.createPlaylist(name)
+                                        snackbarHostState.showSnackbar("Created playlist \"$name\"", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onDeletePlaylist = { pid ->
+                                    coroutineScope.launch {
+                                        libraryRepository.deletePlaylist(pid)
+                                        snackbarHostState.showSnackbar("Playlist deleted", duration = SnackbarDuration.Short)
+                                    }
+                                },
+                                onSelectPlaylist = { playlist ->
+                                    selectedPlaylistId = playlist.id
+                                },
+                                onPlayPlaylist = { playlist ->
+                                    if (playlist.tracks.isNotEmpty()) {
+                                        playerController.playTrack(playlist.tracks.first(), playlist.tracks)
+                                        isNowPlayingOpen = true
+                                    } else {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Playlist is empty. Add songs first.", duration = SnackbarDuration.Short)
+                                        }
+                                    }
+                                },
+                                onTrackSelect = { track, list ->
+                                    playerController.playTrack(track, list)
+                                    isNowPlayingOpen = true
+                                },
+                                onBackClick = { selectedTab = ScreenTab.HOME }
+                            )
+                        }
                     }
                 }
             }
@@ -386,6 +474,9 @@ fun FuelXApp() {
                 onNextClick = { playerController.skipNext() },
                 onSeekTo = { newPos -> playerController.seekTo(newPos) },
                 onOpenLyrics = { isLyricsOpen = true },
+                onAddToPlaylist = {
+                    currentTrack?.let { trackForPlaylistDialog = it }
+                },
                 onClose = { isNowPlayingOpen = false }
             )
         }
@@ -403,6 +494,31 @@ fun FuelXApp() {
                 },
                 onRetry = { lyricsRetryCount++ },
                 onClose = { isLyricsOpen = false }
+            )
+        }
+
+        // Add to Playlist Dialog
+        trackForPlaylistDialog?.let { track ->
+            AddToPlaylistDialog(
+                track = track,
+                playlists = playlists,
+                onDismissRequest = { trackForPlaylistDialog = null },
+                onSelectPlaylist = { playlist ->
+                    coroutineScope.launch {
+                        val added = libraryRepository.addTrackToPlaylist(playlist.id, track)
+                        val msg = if (added) "Added to \"${playlist.name}\"" else "Already in \"${playlist.name}\""
+                        snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
+                    }
+                },
+                onCreatePlaylistAndAdd = { name ->
+                    coroutineScope.launch {
+                        val newId = libraryRepository.createPlaylist(name)
+                        if (newId != -1L) {
+                            libraryRepository.addTrackToPlaylist(newId, track)
+                            snackbarHostState.showSnackbar("Added to \"$name\"", duration = SnackbarDuration.Short)
+                        }
+                    }
+                }
             )
         }
 

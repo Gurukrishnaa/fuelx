@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -60,6 +61,7 @@ fun HomeScreen(
     isFavorite: (String) -> Boolean = { false },
     onToggleFavorite: (Track) -> Unit = {},
     onAddToQueue: (Track) -> Unit = {},
+    onAddToPlaylist: (Track) -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null,
     onRetry: () -> Unit = {},
@@ -332,6 +334,7 @@ fun HomeScreen(
                 isFav = isFavorite(track.id),
                 onToggleFav = { onToggleFavorite(track) },
                 onAddToQueue = { onAddToQueue(track) },
+                onAddToPlaylist = { onAddToPlaylist(track) },
                 onClick = { onTrackSelect(track, topSongs) }
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -438,6 +441,7 @@ fun HomeScreen(
                     isFav = isFavorite(track.id),
                     onToggleFav = { onToggleFavorite(track) },
                     onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = { onAddToPlaylist(track) },
                     onClick = { onTrackSelect(track, cleanGenreTracks) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -522,6 +526,7 @@ private fun TrackListItem(
     isFav: Boolean,
     onToggleFav: () -> Unit,
     onAddToQueue: () -> Unit = {},
+    onAddToPlaylist: () -> Unit = {},
     onClick: () -> Unit
 ) {
     Card(
@@ -619,6 +624,19 @@ private fun TrackListItem(
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                     contentDescription = "Add to queue",
+                    tint = TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // Playlist button
+            IconButton(
+                onClick = onAddToPlaylist,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    contentDescription = "Add to playlist",
                     tint = TextMuted,
                     modifier = Modifier.size(20.dp)
                 )

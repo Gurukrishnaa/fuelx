@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -50,6 +51,7 @@ fun NowPlayingScreen(
     onClearQueue: () -> Unit = {},
     onPlayFromQueue: (Int) -> Unit = {},
     onOpenLyrics: () -> Unit,
+    onAddToPlaylist: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -251,6 +253,21 @@ fun NowPlayingScreen(
                         imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                         contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
                         tint = if (isFavorite) AccentPrimary else TextSecondary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Add to playlist button
+                IconButton(
+                    onClick = onAddToPlaylist,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        contentDescription = "Add to playlist",
+                        tint = TextSecondary,
                         modifier = Modifier.size(28.dp)
                     )
                 }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -40,6 +42,8 @@ fun SearchScreen(
     currentTrack: Track?,
     isFavorite: (String) -> Boolean = { false },
     onToggleFavorite: (Track) -> Unit = {},
+    onAddToQueue: (Track) -> Unit = {},
+    onAddToPlaylist: (Track) -> Unit = {},
     onTrackSelect: (Track, List<Track>) -> Unit,
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -284,6 +288,30 @@ fun SearchScreen(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextMuted,
                                         modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onAddToQueue(track) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                        contentDescription = "Add to queue",
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onAddToPlaylist(track) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                        contentDescription = "Add to playlist",
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
 

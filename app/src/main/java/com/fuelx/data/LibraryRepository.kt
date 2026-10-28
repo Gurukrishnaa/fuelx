@@ -1,6 +1,7 @@
 package com.fuelx.data
 
 import android.content.Context
+import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,12 +13,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Repository interface defining operations for persistent Favorites and History.
+ * Repository interface defining operations for persistent Favorites, History, Downloads, and Playlists.
  */
 interface LibraryRepository {
     val favorites: StateFlow<List<Track>>
     val history: StateFlow<List<Track>>
     val downloads: StateFlow<List<Track>>
+    val playlists: StateFlow<List<Playlist>>
 
     fun isFavorite(trackId: String): Boolean
     suspend fun toggleFavorite(track: Track): Boolean
@@ -30,6 +32,13 @@ interface LibraryRepository {
     fun getDownloadedTrack(trackId: String): Track?
     suspend fun refreshDownloads()
     suspend fun removeDownload(trackId: String)
+
+    suspend fun createPlaylist(name: String): Long
+    suspend fun deletePlaylist(playlistId: Long): Boolean
+    suspend fun renamePlaylist(playlistId: Long, newName: String): Boolean
+    suspend fun addTrackToPlaylist(playlistId: Long, track: Track): Boolean
+    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String): Boolean
+    suspend fun refreshPlaylists()
 }
 
 class DefaultLibraryRepository(
@@ -47,6 +56,9 @@ class DefaultLibraryRepository(
     private val _downloads = MutableStateFlow<List<Track>>(emptyList())
     override val downloads: StateFlow<List<Track>> = _downloads.asStateFlow()
 
+    private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
+    override val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
+
     private val favoriteIds = mutableSetOf<String>()
     private val downloadedIds = mutableSetOf<String>()
 
@@ -61,6 +73,7 @@ class DefaultLibraryRepository(
         val favs = database.getAllFavorites()
         val hist = database.getAllHistory()
         val down = database.getAllDownloads()
+        val plist = database.getAllPlaylists()
 
         synchronized(favoriteIds) {
             favoriteIds.clear()
@@ -75,6 +88,7 @@ class DefaultLibraryRepository(
         _favorites.value = favs
         _history.value = hist
         _downloads.value = down
+        _playlists.value = plist
     }
 
     override fun isFavorite(trackId: String): Boolean {
@@ -145,6 +159,44 @@ class DefaultLibraryRepository(
             downloadedIds.remove(trackId)
         }
         _downloads.value = database.getAllDownloads()
+    }
+
+    override suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
+        val id = database.createPlaylist(name)
+        _playlists.value = database.getAllPlaylists()
+        id
+    }
+
+    override suspend fun deletePlaylist(playlistId: Long): Boolean = withContext(Dispatchers.IO) {
+        val deleted = database.deletePlaylist(playlistId)
+        _playlists.value = database.getAllPlaylists()
+        deleted
+    }
+
+    override suspend fun renamePlaylist(playlistId: Long, newName: String): Boolean = withContext(Dispatchers.IO) {
+        val renamed = database.renamePlaylist(playlistId, newName)
+        _playlists.value = database.getAllPlaylists()
+        renamed
+    }
+
+    override suspend fun addTrackToPlaylist(playlistId: Long, track: Track): Boolean = withContext(Dispatchers.IO) {
+        val added = database.addTrackToPlaylist(playlistId, track)
+        if (added) {
+            _playlists.value = database.getAllPlaylists()
+        }
+        added
+    }
+
+    override suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String): Boolean = withContext(Dispatchers.IO) {
+        val removed = database.removeTrackFromPlaylist(playlistId, trackId)
+        if (removed) {
+            _playlists.value = database.getAllPlaylists()
+        }
+        removed
+    }
+
+    override suspend fun refreshPlaylists() = withContext(Dispatchers.IO) {
+        _playlists.value = database.getAllPlaylists()
     }
 
     companion object {
