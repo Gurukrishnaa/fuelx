@@ -54,4 +54,15 @@ class YouTubeMusicProvider(
             emptyList()
         }
     }
+
+    override suspend fun getGenreTracks(genreId: String, languages: Set<String>): List<Track> {
+        return try {
+            val tracks = innertubeClient.getGenreTracks(genreId, languages)
+            tracks.forEach { trackCache[it.id] = it }
+            tracks
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
 }

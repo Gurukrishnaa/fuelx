@@ -1,33 +1,58 @@
 package com.fuelx.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fuelx.data.DefaultMusicRepository
+import com.fuelx.data.MusicRepository
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
+import kotlinx.coroutines.launch
 
-import androidx.compose.foundation.BorderStroke
+private data class HomeGenre(
+    val id: String,
+    val label: String
+)
+
+private val HOME_GENRES = listOf(
+    HomeGenre("all", "All Songs"),
+    HomeGenre("melody", "Melody & Romantic"),
+    HomeGenre("party", "Party & Dance"),
+    HomeGenre("hiphop", "Hip Hop & Rap"),
+    HomeGenre("chill", "Acoustic & Chill"),
+    HomeGenre("rock", "Rock & Energy"),
+    HomeGenre("folk", "Folk & Indie")
+)
+
+// Maximum duration ceiling for individual songs (15 minutes). Longer tracks are multi-song mixes.
+private const val MAX_SONG_DURATION_MS = 15 * 60 * 1000L
 
 @Composable
 fun HomeScreen(
     tracks: List<Track>,
     currentTrack: Track?,
     isPlaying: Boolean,
+    repository: MusicRepository = remember { DefaultMusicRepository() },
     recentlyPlayed: List<Track> = emptyList(),
     selectedLanguages: Set<String> = emptySet(),
     onOpenLanguagePicker: () -> Unit = {},
@@ -131,8 +156,36 @@ fun HomeScreen(
         return
     }
 
-    val displayRecent = if (recentlyPlayed.isNotEmpty()) recentlyPlayed.take(8) else tracks.take(4)
-    val recentTitle = if (recentlyPlayed.isNotEmpty()) "Recently Played" else "Quick Picks"
+    // Dynamic Genre State
+    var selectedGenreId by remember { mutableStateOf("all") }
+    var genreTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var isGenreLoading by remember { mutableStateOf(false) }
+
+    // Fetch genre tracks when selectedGenre or languages change
+    LaunchedEffect(selectedGenreId, selectedLanguages, tracks) {
+        if (selectedGenreId == "all") {
+            genreTracks = tracks
+            isGenreLoading = false
+        } else {
+            isGenreLoading = true
+            val result = repository.getGenreTracks(selectedGenreId, selectedLanguages)
+            isGenreLoading = false
+            if (result.isSuccess) {
+                genreTracks = result.getOrDefault(emptyList())
+            }
+        }
+    }
+
+    // Filter tracks to ensure no mix/jukebox longer than 15 minutes is shown
+    val cleanTracks = remember(tracks) {
+        tracks.filter { it.durationMs == null || it.durationMs <= MAX_SONG_DURATION_MS }
+    }
+    val cleanGenreTracks = remember(genreTracks) {
+        genreTracks.filter { it.durationMs == null || it.durationMs <= MAX_SONG_DURATION_MS }
+    }
+
+    // Top Songs slice (first 6 standalone hits)
+    val topSongs = cleanTracks.take(6)
 
     LazyColumn(
         modifier = modifier
@@ -142,8 +195,8 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 90.dp)
     ) {
+        // App Header & Language Switcher
         item {
-            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -158,7 +211,8 @@ fun HomeScreen(
                     )
                     Text(
                         text = "Your music, uninterrupted",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
                     )
                 }
 
@@ -199,54 +253,191 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Quick Picks / Recent row
-        item {
-            Text(
-                text = recentTitle,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 20.dp)
-            ) {
-                items(displayRecent) { track ->
-                    RecentTrackCard(
-                        track = track,
-                        isSelected = track.id == currentTrack?.id,
-                        onClick = { onTrackSelect(track, displayRecent) }
+        // Section 1: Recently Listened (Always first if history exists)
+        if (recentlyPlayed.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = null,
+                        tint = AccentPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Recently Listened",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary
+                    )
+                }
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 20.dp)
+                ) {
+                    items(recentlyPlayed.take(10)) { track ->
+                        RecentTrackCard(
+                            track = track,
+                            isSelected = track.id == currentTrack?.id,
+                            isPlaying = track.id == currentTrack?.id && isPlaying,
+                            onClick = { onTrackSelect(track, recentlyPlayed) }
+                        )
+                    }
                 }
             }
         }
 
-        // All Tracks header
+        // Section 2: Top Songs (Clean standalone hit singles based on language)
         item {
-            val catalogTitle = if (selectedLanguages.isNotEmpty()) {
-                "Top ${selectedLanguages.joinToString(" • ")} Hits"
-            } else {
-                "Featured Catalog"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Whatshot,
+                    contentDescription = null,
+                    tint = AccentSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                val topTitle = if (selectedLanguages.isNotEmpty()) {
+                    "Top ${selectedLanguages.joinToString(" • ")} Hits"
+                } else {
+                    "Top Trending Hits"
+                }
+                Text(
+                    text = topTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary
+                )
             }
-            Text(
-                text = catalogTitle,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-            )
         }
 
-        // Track items
-        items(tracks) { track ->
+        itemsIndexed(topSongs) { index, track ->
             val isCurrent = track.id == currentTrack?.id
             TrackListItem(
                 track = track,
+                rank = index + 1,
                 isCurrent = isCurrent,
                 isPlaying = isCurrent && isPlaying,
                 isFav = isFavorite(track.id),
                 onToggleFav = { onToggleFavorite(track) },
-                onClick = { onTrackSelect(track, tracks) }
+                onClick = { onTrackSelect(track, topSongs) }
             )
             Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Section 3: Genres (Curated shelves & interactive filter based on language)
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Category,
+                    contentDescription = null,
+                    tint = AccentPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "Explore Genres",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = if (selectedLanguages.isNotEmpty()) {
+                            "Curated for ${selectedLanguages.joinToString(", ")}"
+                        } else {
+                            "Curated standalone hits by mood & genre"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+
+            // Genre Chips Horizontal Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HOME_GENRES.forEach { genre ->
+                    val isSelected = selectedGenreId == genre.id
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedGenreId = genre.id },
+                        label = {
+                            Text(
+                                text = genre.label,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AccentPrimary.copy(alpha = 0.2f),
+                            selectedLabelColor = AccentPrimary,
+                            containerColor = DarkSurface,
+                            labelColor = TextSecondary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) AccentPrimary.copy(alpha = 0.6f) else Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Genre Items Section
+        if (isGenreLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = AccentPrimary,
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                }
+            }
+        } else {
+            items(cleanGenreTracks) { track ->
+                val isCurrent = track.id == currentTrack?.id
+                TrackListItem(
+                    track = track,
+                    rank = null,
+                    isCurrent = isCurrent,
+                    isPlaying = isCurrent && isPlaying,
+                    isFav = isFavorite(track.id),
+                    onToggleFav = { onToggleFavorite(track) },
+                    onClick = { onTrackSelect(track, cleanGenreTracks) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }
@@ -255,11 +446,12 @@ fun HomeScreen(
 private fun RecentTrackCard(
     track: Track,
     isSelected: Boolean,
+    isPlaying: Boolean,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
-            .width(140.dp)
+            .width(136.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
@@ -267,26 +459,49 @@ private fun RecentTrackCard(
         )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            TrackArtwork(
-                artworkUrl = track.displayArtwork,
-                contentDescription = "${track.title} artwork",
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(110.dp),
-                shape = RoundedCornerShape(10.dp),
-                placeholderColor = AccentSecondary.copy(alpha = 0.2f),
-                placeholderText = "♪"
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                TrackArtwork(
+                    artworkUrl = track.displayArtwork,
+                    contentDescription = "${track.title} artwork",
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(10.dp),
+                    placeholderColor = AccentSecondary.copy(alpha = 0.2f),
+                    placeholderText = "♪"
+                )
+                if (isSelected && isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(DarkBackground.copy(alpha = 0.65f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = "Playing",
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = if (isSelected) AccentPrimary else TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = track.artist,
                 style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -297,6 +512,7 @@ private fun RecentTrackCard(
 @Composable
 private fun TrackListItem(
     track: Track,
+    rank: Int? = null,
     isCurrent: Boolean,
     isPlaying: Boolean,
     isFav: Boolean,
@@ -318,8 +534,19 @@ private fun TrackListItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Optional Rank Badge
+            if (rank != null) {
+                Text(
+                    text = rank.toString(),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = if (rank <= 3) AccentPrimary else TextSecondary,
+                    modifier = Modifier.width(24.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
             Box(
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(46.dp),
                 contentAlignment = Alignment.Center
             ) {
                 TrackArtwork(
@@ -341,7 +568,8 @@ private fun TrackListItem(
                         Icon(
                             imageVector = Icons.Rounded.GraphicEq,
                             contentDescription = "Playing",
-                            tint = AccentPrimary
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -362,6 +590,7 @@ private fun TrackListItem(
                 Text(
                     text = "${track.artist} • ${track.album ?: "Single"}",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

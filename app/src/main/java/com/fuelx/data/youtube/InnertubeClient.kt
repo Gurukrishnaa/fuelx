@@ -53,7 +53,7 @@ class InnertubeClient(
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext emptyList()
                 val body = response.body?.string() ?: return@withContext emptyList()
-                parseSearchResponse(JSONObject(body))
+                parseSearchResponse(JSONObject(body)).filter { isCleanSong(it) }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -63,8 +63,8 @@ class InnertubeClient(
 
     suspend fun getTrending(languages: Set<String> = emptySet()): List<Track> = withContext(Dispatchers.IO) {
         if (languages.isEmpty()) {
-            val hits = search("Top Music Hits 2024")
-            return@withContext if (hits.isNotEmpty()) hits else search("Trending Songs")
+            val hits = search("Latest Hit Songs 2024").filter { isCleanSong(it) }
+            return@withContext if (hits.isNotEmpty()) hits else search("Trending Songs").filter { isCleanSong(it) }
         }
 
         val allTracks = mutableListOf<Track>()
@@ -72,14 +72,14 @@ class InnertubeClient(
 
         for (lang in languages) {
             val query = when (lang.lowercase()) {
-                "tamil" -> "Top Tamil Songs 2024"
-                "hindi" -> "Top Hindi Songs 2024"
-                "malayalam" -> "Top Malayalam Songs 2024"
-                "english" -> "Top English Hits 2024"
-                else -> "Top $lang Songs"
+                "tamil" -> "Latest Tamil Movie Hit Songs 2024"
+                "hindi" -> "Latest Bollywood Hit Songs 2024"
+                "malayalam" -> "Latest Malayalam Movie Songs 2024"
+                "english" -> "Top Billboard Hit Songs 2024"
+                else -> "Latest $lang Hit Songs 2024"
             }
-            val results = search(query)
-            results.take(10).forEach { track ->
+            val results = search(query).filter { isCleanSong(it) }
+            results.take(12).forEach { track ->
                 if (seenIds.add(track.id)) {
                     allTracks.add(track)
                 }
@@ -89,9 +89,139 @@ class InnertubeClient(
         if (allTracks.isNotEmpty()) {
             allTracks
         } else {
-            val fallback = search("Top Music Hits 2024")
-            if (fallback.isNotEmpty()) fallback else search("Trending Songs")
+            val fallback = search("Latest Hit Songs 2024").filter { isCleanSong(it) }
+            if (fallback.isNotEmpty()) fallback else search("Trending Songs").filter { isCleanSong(it) }
         }
+    }
+
+    suspend fun getGenreTracks(genreId: String, languages: Set<String> = emptySet()): List<Track> = withContext(Dispatchers.IO) {
+        if (genreId.equals("all", ignoreCase = true)) {
+            return@withContext getTrending(languages)
+        }
+
+        val allTracks = mutableListOf<Track>()
+        val seenIds = mutableSetOf<String>()
+        val langs = if (languages.isEmpty()) setOf("Global") else languages
+
+        for (lang in langs) {
+            val l = lang.lowercase()
+            val query = when (genreId.lowercase()) {
+                "melody" -> when (l) {
+                    "tamil" -> "Tamil Melody Hit Songs 2024"
+                    "hindi" -> "Bollywood Romantic Melody Songs 2024"
+                    "malayalam" -> "Malayalam Melody Songs 2024"
+                    "english" -> "Pop Acoustic Love Songs 2024"
+                    else -> "$lang Melody Romantic Songs"
+                }
+                "party" -> when (l) {
+                    "tamil" -> "Tamil Kuthu Party Dance Songs"
+                    "hindi" -> "Bollywood Dance Party Songs"
+                    "malayalam" -> "Malayalam Dance Party Songs"
+                    "english" -> "Party Dance Pop Club Songs"
+                    else -> "$lang Dance Party Songs"
+                }
+                "hiphop" -> when (l) {
+                    "tamil" -> "Tamil Hip Hop Rap Songs"
+                    "hindi" -> "Desi Hip Hop Hindi Rap Songs"
+                    "malayalam" -> "Malayalam Hip Hop Songs"
+                    "english" -> "Hip Hop Rap Hits"
+                    else -> "$lang Hip Hop Rap Songs"
+                }
+                "chill" -> when (l) {
+                    "tamil" -> "Tamil Lo-Fi Acoustic Songs"
+                    "hindi" -> "Hindi Lo-Fi Acoustic Songs"
+                    "malayalam" -> "Malayalam Lo-Fi Acoustic Songs"
+                    "english" -> "Lo-Fi Acoustic Chill Pop Songs"
+                    else -> "$lang Acoustic Chill Songs"
+                }
+                "rock" -> when (l) {
+                    "tamil" -> "Tamil Rock Fast Songs"
+                    "hindi" -> "Hindi Rock Metal Songs"
+                    "malayalam" -> "Malayalam Rock Songs"
+                    "english" -> "Rock Hits Modern Songs"
+                    else -> "$lang Rock Songs"
+                }
+                "folk" -> when (l) {
+                    "tamil" -> "Tamil Folk Gaana Songs"
+                    "hindi" -> "Hindi Indie Folk Songs"
+                    "malayalam" -> "Malayalam Folk Indie Songs"
+                    "english" -> "Indie Folk Acoustic Songs"
+                    else -> "$lang Folk Indie Songs"
+                }
+                else -> "$lang $genreId Songs"
+            }
+
+            val results = search(query).filter { isCleanSong(it) }
+            results.take(12).forEach { track ->
+                if (seenIds.add(track.id)) {
+                    allTracks.add(track)
+                }
+            }
+        }
+
+        if (allTracks.isNotEmpty()) allTracks else getTrending(languages)
+    }
+
+    /**
+     * Filters out non-song videos such as long compilation playlists, jukeboxes,
+     * full albums, 1-hour loops, or short video snippets.
+     */
+    fun isCleanSong(track: Track): Boolean {
+        // 1. Filter out videos that are excessively long or too short
+        // Single songs must not exceed 15 minutes (900,000 ms). Anything longer is a mix/jukebox.
+        val dur = track.durationMs
+        if (dur != null) {
+            if (dur > 15 * 60 * 1000L || dur < 45_000L) {
+                return false
+            }
+        }
+
+        // 2. Reject compilation and jukebox patterns in title
+        val title = track.title.lowercase()
+        val blockedPatterns = listOf(
+            "jukebox",
+            "audio jukebox",
+            "video jukebox",
+            "top 100",
+            "top 50",
+            "top 40",
+            "top 30",
+            "top 20",
+            "top 10",
+            "non stop",
+            "nonstop",
+            "non-stop",
+            "full album",
+            "full songs",
+            "all songs",
+            "all hits",
+            "mega hits",
+            "greatest hits",
+            "best of",
+            "collection",
+            "compilation",
+            "mashup",
+            "1 hour",
+            "2 hour",
+            "3 hour",
+            "hours",
+            "playlist",
+            "audio songs"
+        )
+
+        for (pattern in blockedPatterns) {
+            if (title.contains(pattern)) {
+                return false
+            }
+        }
+
+        // 3. Reject compilation patterns in artist or album names
+        val artist = track.artist.lowercase()
+        if (artist.contains("jukebox") || artist.contains("compilation")) {
+            return false
+        }
+
+        return true
     }
 
     private fun parseSearchResponse(json: JSONObject): List<Track> {

@@ -280,6 +280,7 @@ fun FuelXApp() {
                 when (selectedTab) {
                     ScreenTab.HOME -> {
                         HomeScreen(
+                            repository = repository,
                             tracks = trendingTracks,
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,

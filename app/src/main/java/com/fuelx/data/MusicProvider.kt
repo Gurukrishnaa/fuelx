@@ -29,4 +29,9 @@ interface MusicProvider {
      */
     suspend fun getTrendingTracks(): List<Track>
     suspend fun getTrendingTracks(languages: Set<String>): List<Track> = getTrendingTracks()
+
+    /**
+     * Get genre tracks filtered by genre and language preferences.
+     */
+    suspend fun getGenreTracks(genreId: String, languages: Set<String>): List<Track> = emptyList()
 }
