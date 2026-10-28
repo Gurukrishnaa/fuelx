@@ -67,6 +67,9 @@ class PlayerController(
     private val _playbackError = MutableStateFlow<String?>(null)
     val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
 
+    private val _queue = MutableStateFlow<List<Track>>(emptyList())
+    val queue: StateFlow<List<Track>> = _queue.asStateFlow()
+
     var playlist: List<Track> = emptyList()
         private set
     private var autoRetryCount = 0
@@ -471,10 +474,44 @@ class PlayerController(
         preferences.savePositionOnly(positionMs)
     }
 
-    fun hasNext(): Boolean = playlist.isNotEmpty()
+    fun hasNext(): Boolean = _queue.value.isNotEmpty() || playlist.isNotEmpty()
     fun hasPrevious(): Boolean = playlist.isNotEmpty()
 
+    fun addToQueue(track: Track) {
+        _queue.value = _queue.value + track
+    }
+
+    fun removeFromQueue(index: Int) {
+        val currentQueue = _queue.value.toMutableList()
+        if (index in currentQueue.indices) {
+            currentQueue.removeAt(index)
+            _queue.value = currentQueue
+        }
+    }
+
+    fun clearQueue() {
+        _queue.value = emptyList()
+    }
+
+    fun playFromQueue(index: Int) {
+        val currentQueue = _queue.value.toMutableList()
+        if (index in currentQueue.indices) {
+            val track = currentQueue.removeAt(index)
+            _queue.value = currentQueue
+            playTrack(track, playlist, forceRestart = true)
+        }
+    }
+
     fun skipNext(): Boolean {
+        // FIFO Queue priority: first added song in the queue is played first
+        val currentQueue = _queue.value
+        if (currentQueue.isNotEmpty()) {
+            val nextTrack = currentQueue.first()
+            _queue.value = currentQueue.drop(1)
+            playTrack(nextTrack, playlist, forceRestart = true)
+            return true
+        }
+
         if (playlist.isEmpty()) return false
         val current = _currentTrack.value
         val currentIndex = playlist.indexOfFirst { it.id == current?.id }

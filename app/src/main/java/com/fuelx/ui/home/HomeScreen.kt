@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,6 +59,7 @@ fun HomeScreen(
     onOpenLanguagePicker: () -> Unit = {},
     isFavorite: (String) -> Boolean = { false },
     onToggleFavorite: (Track) -> Unit = {},
+    onAddToQueue: (Track) -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null,
     onRetry: () -> Unit = {},
@@ -329,6 +331,7 @@ fun HomeScreen(
                 isPlaying = isCurrent && isPlaying,
                 isFav = isFavorite(track.id),
                 onToggleFav = { onToggleFavorite(track) },
+                onAddToQueue = { onAddToQueue(track) },
                 onClick = { onTrackSelect(track, topSongs) }
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -434,6 +437,7 @@ fun HomeScreen(
                     isPlaying = isCurrent && isPlaying,
                     isFav = isFavorite(track.id),
                     onToggleFav = { onToggleFavorite(track) },
+                    onAddToQueue = { onAddToQueue(track) },
                     onClick = { onTrackSelect(track, cleanGenreTracks) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -517,6 +521,7 @@ private fun TrackListItem(
     isPlaying: Boolean,
     isFav: Boolean,
     onToggleFav: () -> Unit,
+    onAddToQueue: () -> Unit = {},
     onClick: () -> Unit
 ) {
     Card(
@@ -603,6 +608,19 @@ private fun TrackListItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMuted,
                     modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+
+            // Queue button
+            IconButton(
+                onClick = onAddToQueue,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                    contentDescription = "Add to queue",
+                    tint = TextMuted,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 

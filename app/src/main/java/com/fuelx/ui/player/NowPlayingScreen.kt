@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,7 @@ import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingScreen(
     track: Track,
@@ -33,6 +37,7 @@ fun NowPlayingScreen(
     isFavorite: Boolean = false,
     playbackError: String? = null,
     downloadState: DownloadState = DownloadState.Idle,
+    queue: List<Track> = emptyList(),
     onToggleFavorite: () -> Unit = {},
     onDownloadClick: () -> Unit = {},
     onDeleteDownload: () -> Unit = {},
@@ -41,6 +46,9 @@ fun NowPlayingScreen(
     onNextClick: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onRetryPlayback: () -> Unit = {},
+    onRemoveFromQueue: (Int) -> Unit = {},
+    onClearQueue: () -> Unit = {},
+    onPlayFromQueue: (Int) -> Unit = {},
     onOpenLyrics: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -48,6 +56,7 @@ fun NowPlayingScreen(
     var isShuffle by remember { mutableStateOf(false) }
     var isRepeat by remember { mutableStateOf(false) }
     var showRemoveDownloadDialog by remember { mutableStateOf(false) }
+    var showQueueSheet by remember { mutableStateOf(false) }
 
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
@@ -107,12 +116,35 @@ fun NowPlayingScreen(
                 color = TextSecondary
             )
 
-            IconButton(onClick = onOpenLyrics) {
-                Icon(
-                    imageVector = Icons.Rounded.Subtitles,
-                    contentDescription = "Lyrics",
-                    tint = AccentPrimary
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { showQueueSheet = true }) {
+                    BadgedBox(
+                        badge = {
+                            if (queue.isNotEmpty()) {
+                                Badge(
+                                    containerColor = AccentPrimary,
+                                    contentColor = DarkBackground
+                                ) {
+                                    Text(text = queue.size.toString())
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = "Queue",
+                            tint = if (queue.isNotEmpty()) AccentPrimary else TextPrimary
+                        )
+                    }
+                }
+
+                IconButton(onClick = onOpenLyrics) {
+                    Icon(
+                        imageVector = Icons.Rounded.Subtitles,
+                        contentDescription = "Lyrics",
+                        tint = AccentPrimary
+                    )
+                }
             }
         }
 
@@ -431,6 +463,172 @@ fun NowPlayingScreen(
                 }
             }
         )
+    }
+
+    // Up Next Queue Sheet
+    if (showQueueSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showQueueSheet = false },
+            containerColor = DarkSurface,
+            contentColor = TextPrimary,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
+                // Header with Title & Clear All
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = null,
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (queue.isNotEmpty()) "Up Next (${queue.size})" else "Up Next",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    if (queue.isNotEmpty()) {
+                        TextButton(onClick = onClearQueue) {
+                            Text("Clear", color = AccentSecondary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (queue.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Queue is empty",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Tap the queue icon on any song to play it next.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 28.dp)
+                    ) {
+                        itemsIndexed(queue) { index, queuedTrack ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onPlayFromQueue(index)
+                                        showQueueSheet = false
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = AccentPrimary,
+                                        modifier = Modifier.width(24.dp)
+                                    )
+
+                                    Box(
+                                        modifier = Modifier.size(44.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        TrackArtwork(
+                                            artworkUrl = queuedTrack.displayArtwork,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            placeholderColor = DarkSurface,
+                                            placeholderText = "♪"
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = queuedTrack.title,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = queuedTrack.artist,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    queuedTrack.formattedDuration?.let { dur ->
+                                        Text(
+                                            text = dur,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextMuted,
+                                            modifier = Modifier.padding(horizontal = 6.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { onRemoveFromQueue(index) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Remove from queue",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

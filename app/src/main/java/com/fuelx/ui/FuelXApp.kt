@@ -89,6 +89,7 @@ fun FuelXApp() {
     val durationMs by playerController.durationMs.collectAsState()
     val isBuffering by playerController.isBuffering.collectAsState()
     val playbackError by playerController.playbackError.collectAsState()
+    val queue by playerController.queue.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
     var isLyricsOpen by remember { mutableStateOf(false) }
@@ -289,6 +290,15 @@ fun FuelXApp() {
                             onOpenLanguagePicker = { showLanguageDialog = true },
                             isFavorite = { id -> favorites.any { it.id == id } },
                             onToggleFavorite = onToggleFavorite,
+                            onAddToQueue = { track ->
+                                playerController.addToQueue(track)
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Added \"${track.title}\" to queue",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            },
                             isLoading = isTrendingLoading,
                             errorMessage = trendingError,
                             onRetry = { retryCount++ },
@@ -361,6 +371,10 @@ fun FuelXApp() {
                     currentTrack?.let { onToggleFavorite(it) }
                 },
                 downloadState = currentDownloadState,
+                queue = queue,
+                onRemoveFromQueue = { index -> playerController.removeFromQueue(index) },
+                onClearQueue = { playerController.clearQueue() },
+                onPlayFromQueue = { index -> playerController.playFromQueue(index) },
                 onDownloadClick = {
                     currentTrack?.let { downloadManager.downloadTrack(it) }
                 },
