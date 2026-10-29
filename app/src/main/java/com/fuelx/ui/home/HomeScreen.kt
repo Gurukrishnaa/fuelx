@@ -245,8 +245,7 @@ fun HomeScreen(
                 Surface(
                     onClick = onOpenLanguagePicker,
                     shape = RoundedCornerShape(20.dp),
-                    color = DarkSurfaceVariant,
-                    border = BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.5f))
+                    color = DarkSurfaceVariant
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -422,11 +421,7 @@ fun HomeScreen(
                             containerColor = DarkSurface,
                             labelColor = TextSecondary
                         ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) AccentPrimary.copy(alpha = 0.6f) else Color.Transparent
-                        ),
+                        border = null,
                         shape = RoundedCornerShape(20.dp)
                     )
                 }

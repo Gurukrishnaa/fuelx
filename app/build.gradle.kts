@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.okhttp)
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     debugImplementation(libs.androidx.ui.tooling)
 }

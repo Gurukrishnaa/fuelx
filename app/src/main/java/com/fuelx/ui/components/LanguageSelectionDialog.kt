@@ -62,7 +62,6 @@ fun LanguageSelectionDialog(
                 .wrapContentHeight(),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            border = BorderStroke(1.dp, DarkBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
         ) {
             Column(
@@ -129,11 +128,7 @@ fun LanguageSelectionDialog(
                                     }
                                 },
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isChecked) AccentPrimary.copy(alpha = 0.15f) else DarkSurfaceVariant,
-                            border = BorderStroke(
-                                1.5.dp,
-                                if (isChecked) AccentPrimary else Color.Transparent
-                            )
+                            color = if (isChecked) AccentPrimary.copy(alpha = 0.15f) else DarkSurfaceVariant
                         ) {
                             Row(
                                 modifier = Modifier

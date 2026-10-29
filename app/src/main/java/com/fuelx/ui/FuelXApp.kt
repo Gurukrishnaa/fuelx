@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Home
@@ -14,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fuelx.data.DefaultLibraryRepository
@@ -34,6 +37,7 @@ import com.fuelx.ui.library.PlaylistDetailScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
 import com.fuelx.ui.theme.*
+import com.fuelx.util.ArtworkAccentHelper
 import com.fuelx.util.NetworkMonitor
 import com.fuelx.util.ParsedLyrics
 import kotlinx.coroutines.launch
@@ -101,6 +105,13 @@ fun FuelXApp() {
     val queue by playerController.queue.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
+
+    // Dynamic Artwork Accent
+    var currentAccent by remember { mutableStateOf(FuelXColors.AccentDefault) }
+
+    LaunchedEffect(currentTrack?.displayArtwork) {
+        currentAccent = ArtworkAccentHelper.getAccentColor(context, currentTrack?.displayArtwork)
+    }
 
     // Lyrics State
     var parsedLyrics by remember { mutableStateOf<ParsedLyrics?>(null) }
@@ -176,11 +187,12 @@ fun FuelXApp() {
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-    ) {
+    CompositionLocalProvider(LocalAccent provides currentAccent) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkBackground)
+        ) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
@@ -232,51 +244,40 @@ fun FuelXApp() {
                         )
                     }
 
-                    // Navigation Bar
-                    NavigationBar(
-                        containerColor = DarkSurface,
-                        contentColor = TextPrimary,
-                        tonalElevation = 8.dp
+                    // Minimalist 3-Destination Navigation with 4dp Accent Dot
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = FuelXColors.Bg,
+                        tonalElevation = 0.dp
                     ) {
-                        NavigationBarItem(
-                            selected = selectedTab == ScreenTab.HOME,
-                            onClick = { selectedTab = ScreenTab.HOME },
-                            icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
-                            label = { Text("Home") },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = AccentPrimary,
-                                selectedTextColor = AccentPrimary,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = DarkSurfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .height(56.dp)
+                                .padding(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FuelXNavItem(
+                                imageVector = Icons.Rounded.Home,
+                                contentDescription = "Home",
+                                isSelected = selectedTab == ScreenTab.HOME,
+                                onClick = { selectedTab = ScreenTab.HOME }
                             )
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == ScreenTab.SEARCH,
-                            onClick = { selectedTab = ScreenTab.SEARCH },
-                            icon = { Icon(Icons.Rounded.Search, contentDescription = "Search") },
-                            label = { Text("Search") },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = AccentPrimary,
-                                selectedTextColor = AccentPrimary,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = DarkSurfaceVariant
+                            FuelXNavItem(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = "Search",
+                                isSelected = selectedTab == ScreenTab.SEARCH,
+                                onClick = { selectedTab = ScreenTab.SEARCH }
                             )
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == ScreenTab.LIBRARY,
-                            onClick = { selectedTab = ScreenTab.LIBRARY },
-                            icon = { Icon(Icons.Rounded.LibraryMusic, contentDescription = "Library") },
-                            label = { Text("Library") },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = AccentPrimary,
-                                selectedTextColor = AccentPrimary,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = DarkSurfaceVariant
+                            FuelXNavItem(
+                                imageVector = Icons.Rounded.LibraryMusic,
+                                contentDescription = "Library",
+                                isSelected = selectedTab == ScreenTab.LIBRARY,
+                                onClick = { selectedTab = ScreenTab.LIBRARY }
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -532,5 +533,38 @@ fun FuelXApp() {
                 }
             )
         }
+    }
+}
+}
+
+@Composable
+private fun FuelXNavItem(
+    imageVector: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = LocalAccent.current
+    Column(
+        modifier = modifier
+            .pressableScale(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+            tint = if (isSelected) FuelXColors.TextPrimary else FuelXColors.TextTertiary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) accent else Color.Transparent)
+        )
     }
 }

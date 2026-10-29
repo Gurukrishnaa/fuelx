@@ -2,6 +2,7 @@ package com.fuelx.data.youtube
 
 import android.net.Uri
 import com.fuelx.model.Track
+import com.fuelx.util.cleanArtistString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -416,23 +417,39 @@ class InnertubeClient(
                 ?.optJSONObject("text")?.optJSONArray("runs")
 
             if (col1Runs != null) {
-                val parts = mutableListOf<String>()
+                val groups = mutableListOf<StringBuilder>()
+                var currentGroup = StringBuilder()
+
                 for (k in 0 until col1Runs.length()) {
-                    val runText = col1Runs.optJSONObject(k)?.optString("text") ?: continue
-                    val cleanRun = runText.trim()
-                    if (cleanRun.isNotEmpty() && cleanRun != "•" && cleanRun != "Song") {
-                        // Check if it's duration (e.g. "3:45" or "4:12")
-                        if (cleanRun.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
-                            durationMs = parseDurationStringToMs(cleanRun)
+                    val runText = col1Runs.optJSONObject(k)?.optString("text").orEmpty()
+                    val trimmed = runText.trim()
+                    if (trimmed == "•") {
+                        if (currentGroup.isNotBlank()) {
+                            groups.add(currentGroup)
+                            currentGroup = StringBuilder()
+                        }
+                    } else if (trimmed.isNotEmpty() && trimmed != "Song") {
+                        if (trimmed.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
+                            durationMs = parseDurationStringToMs(trimmed)
                         } else {
-                            parts.add(cleanRun)
+                            if (currentGroup.isNotEmpty() && !runText.startsWith(",") && !currentGroup.endsWith(" ")) {
+                                currentGroup.append(" ")
+                            }
+                            currentGroup.append(runText)
                         }
                     }
                 }
-                if (parts.isNotEmpty()) {
-                    artist = parts[0]
-                    if (parts.size > 1) {
-                        album = parts[1]
+                if (currentGroup.isNotBlank()) {
+                    groups.add(currentGroup)
+                }
+
+                if (groups.isNotEmpty()) {
+                    artist = cleanArtistString(groups[0].toString())
+                    if (groups.size > 1) {
+                        val potentialAlbum = cleanArtistString(groups[1].toString())
+                        if (potentialAlbum.isNotEmpty() && potentialAlbum != "•" && potentialAlbum != ",") {
+                            album = potentialAlbum
+                        }
                     }
                 }
             }
@@ -535,11 +552,11 @@ class InnertubeClient(
             val t = runs.optJSONObject(i)?.optString("text") ?: continue
             val clean = t.trim()
             if (clean != "•" && clean != "Song") {
-                if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(" ")
+                if (sb.isNotEmpty() && !sb.endsWith(" ") && !clean.startsWith(",")) sb.append(" ")
                 sb.append(clean)
             }
         }
-        return sb.toString().trim()
+        return cleanArtistString(sb.toString())
     }
 
     private fun cleanTitle(title: String): String {

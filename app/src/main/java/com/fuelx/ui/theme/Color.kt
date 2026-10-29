@@ -2,15 +2,34 @@ package com.fuelx.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val DarkBackground = Color(0xFF090D16)
-val DarkSurface = Color(0xFF131926)
-val DarkSurfaceVariant = Color(0xFF1E2638)
-val DarkBorder = Color(0xFF2B354C)
+/**
+ * FuelX Design System Color Tokens (Exaggerated Minimalism, Dark-Only).
+ * Pure solid tonal surfaces — strictly zero gradients.
+ */
+object FuelXColors {
+    val Bg = Color(0xFF0A0A0B)             // App background (near OLED black)
+    val Surface1 = Color(0xFF121214)       // Resting cards, list rows
+    val Surface2 = Color(0xFF1A1A1D)       // Elevated cards, sheets, mini player
+    val Surface3 = Color(0xFF232327)       // Pressed state, chips, search field
+    val Outline = Color(0xFF2C2C31)        // Hairline dividers (rare)
+    val TextPrimary = Color(0xFFF4F4EF)    // Warm white for titles & primary content
+    val TextSecondary = Color(0xFFB4B4B0)  // Subtitles & artist names
+    val TextTertiary = Color(0xFF8A8A8F)   // Captions & timestamps
+    val Error = Color(0xFFFF6B6B)          // Actionable errors
+    val AccentDefault = Color(0xFFD4FF4F)  // "Volt" signature accent
+    val OnAccent = Color(0xFF0A0A0B)       // Text/icons on accent fills
+}
 
-val AccentPrimary = Color(0xFF38BDF8)     // Electric sky
-val AccentSecondary = Color(0xFF818CF8)   // Indigo glow
-val TextPrimary = Color(0xFFF1F5F9)
-val TextSecondary = Color(0xFF94A3B8)
-val TextMuted = Color(0xFF64748B)
+// Aliases mapped directly to FuelX design tokens to preserve existing callers seamlessly
+val DarkBackground = FuelXColors.Bg
+val DarkSurface = FuelXColors.Surface1
+val DarkSurfaceVariant = FuelXColors.Surface2
+val DarkBorder = FuelXColors.Outline
+
+val AccentPrimary = FuelXColors.AccentDefault
+val AccentSecondary = Color(0xFF818CF8)
+val TextPrimary = FuelXColors.TextPrimary
+val TextSecondary = FuelXColors.TextSecondary
+val TextMuted = FuelXColors.TextTertiary
 
 val PlaybackGreen = Color(0xFF22C55E)

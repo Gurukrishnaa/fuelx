@@ -5,7 +5,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -14,11 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sync
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.model.Track
+import com.fuelx.ui.player.NowPlayingBackdrop
 import com.fuelx.ui.theme.*
 import com.fuelx.util.ParsedLyrics
 
@@ -75,49 +78,64 @@ fun LyricsScreen(
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { /* Consume taps to avoid bleeding through to screens beneath */ }
-            .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header with inbuilt Back button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "Back",
-                        tint = TextPrimary
-                    )
-                }
+    val accent = LocalAccent.current
 
-                Spacer(modifier = Modifier.width(8.dp))
+    NowPlayingBackdrop(artworkUrl = track.displayArtwork) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { /* Consume taps to avoid bleeding through to screens beneath */ }
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header with Frosted Glass Back button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        IconButton(onClick = onClose) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Lyrics",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = AccentPrimary
-                    )
-                    Text(
-                        text = "${track.title} • ${track.artist}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Lyrics",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = Color.White
+                        )
+                        Text(
+                            text = "${track.title} • ${track.artist}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.65f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-            }
 
             // Body States
             when {
@@ -253,29 +271,24 @@ fun LyricsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        if (isActiveLine) Color.White.copy(alpha = 0.12f)
+                                        else Color.Transparent
+                                    )
+                                    .then(
+                                        if (isActiveLine) Modifier.border(
+                                            BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
+                                            RoundedCornerShape(16.dp)
+                                        ) else Modifier
+                                    )
                                     .clickable {
                                         userScrolledAway = false
                                         onSeekTo(line.timeMs)
                                     }
-                                    .background(
-                                        if (isActiveLine) DarkSurfaceVariant.copy(alpha = 0.35f)
-                                        else Color.Transparent
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (isActiveLine) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.GraphicEq,
-                                        contentDescription = "Active line",
-                                        tint = AccentPrimary,
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .padding(end = 8.dp)
-                                    )
-                                }
-
                                 if (line.words.isNotEmpty()) {
                                     FlowRow(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -288,10 +301,10 @@ fun LyricsScreen(
 
                                             val targetColor = when {
                                                 isWordActive -> Color.White
-                                                isWordPast && isActiveLine -> AccentPrimary
-                                                isWordPast -> TextSecondary.copy(alpha = 0.7f)
-                                                isActiveLine -> TextMuted.copy(alpha = 0.5f)
-                                                else -> TextMuted.copy(alpha = 0.35f)
+                                                isWordPast && isActiveLine -> accent
+                                                isWordPast -> Color.White.copy(alpha = 0.55f)
+                                                isActiveLine -> Color.White.copy(alpha = 0.40f)
+                                                else -> Color.White.copy(alpha = 0.28f)
                                             }
 
                                             val animatedColor by animateColorAsState(
@@ -323,17 +336,25 @@ fun LyricsScreen(
                                     }
                                 } else {
                                     // Fallback for lines without word segmentation
+                                    val targetColor = when {
+                                        isActiveLine -> Color.White
+                                        isPastLine -> Color.White.copy(alpha = 0.55f)
+                                        else -> Color.White.copy(alpha = 0.28f)
+                                    }
+
+                                    val animatedColor by animateColorAsState(
+                                        targetValue = targetColor,
+                                        animationSpec = tween(durationMillis = 200),
+                                        label = "lineColor"
+                                    )
+
                                     Text(
                                         text = line.text,
                                         style = MaterialTheme.typography.headlineMedium.copy(
                                             fontSize = if (isActiveLine) 24.sp else 18.sp,
                                             lineHeight = if (isActiveLine) 32.sp else 26.sp,
                                             fontWeight = if (isActiveLine) FontWeight.Bold else FontWeight.Normal,
-                                            color = when {
-                                                isActiveLine -> AccentPrimary
-                                                isPastLine -> TextSecondary
-                                                else -> TextMuted.copy(alpha = 0.5f)
-                                            }
+                                            color = animatedColor
                                         ),
                                         modifier = Modifier.weight(1f)
                                     )
@@ -352,29 +373,34 @@ fun LyricsScreen(
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp)
+                .padding(bottom = 24.dp)
         ) {
-            Button(
-                onClick = {
-                    userScrolledAway = false
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary),
-                shape = RoundedCornerShape(20.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            Surface(
+                onClick = { userScrolledAway = false },
+                color = accent,
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                shadowElevation = 8.dp
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Sync,
-                    contentDescription = null,
-                    tint = DarkBackground,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Sync to current line",
-                    color = DarkBackground,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Sync,
+                        contentDescription = null,
+                        tint = FuelXColors.OnAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sync to current line",
+                        color = FuelXColors.OnAccent,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
         }
     }
+}
 }

@@ -1,8 +1,13 @@
 package com.fuelx.ui.player
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -23,17 +28,26 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.fuelx.data.DownloadState
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 import com.fuelx.util.ParsedLyrics
+import com.fuelx.util.cleanArtistString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -72,12 +86,21 @@ fun NowPlayingScreen(
     var isRepeat by remember { mutableStateOf(false) }
     var showRemoveDownloadDialog by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
+    var isLyricsExpanded by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
+
+    val accent = LocalAccent.current
+    val artworkScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.92f,
+        animationSpec = ArtworkSpring,
+        label = "artworkScale"
+    )
 
     // Reset seekbar drag state when the track switches
     LaunchedEffect(track.id) {
@@ -97,52 +120,73 @@ fun NowPlayingScreen(
     }
     val sliderValue = if (isDragging) dragProgress else progress
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { /* Consume taps so they don't bleed through to the screen beneath */ }
-            .statusBarsPadding()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Top bar
-        Row(
+    NowPlayingBackdrop(artworkUrl = track.displayArtwork) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { /* Consume taps so they don't bleed through to the screen beneath */ }
+                .statusBarsPadding()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+        // Top bar with Symmetrical Frosted Glass Elements (NOW PLAYING mathematically centered)
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(bottom = 16.dp)
         ) {
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
-                    tint = TextPrimary
-                )
+            // Left: Back button (42.dp circular frosted button)
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .size(42.dp)
+                    .align(Alignment.CenterStart)
+            ) {
+                IconButton(onClick = onClose, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
+            // Center: "NOW PLAYING" Title (perfectly centered on the screen)
             Text(
                 text = "NOW PLAYING",
                 style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 2.sp,
-                    fontWeight = FontWeight.Bold
+                    letterSpacing = 2.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
                 ),
-                color = TextSecondary
+                color = Color.White.copy(alpha = 0.60f),
+                modifier = Modifier.align(Alignment.Center)
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { showQueueSheet = true }) {
+            // Right: Queue button (42.dp circular frosted button, symmetrical to Back)
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .size(42.dp)
+                    .align(Alignment.CenterEnd)
+            ) {
+                IconButton(onClick = { showQueueSheet = true }, modifier = Modifier.fillMaxSize()) {
                     BadgedBox(
                         badge = {
                             if (queue.isNotEmpty()) {
                                 Badge(
-                                    containerColor = AccentPrimary,
-                                    contentColor = DarkBackground
+                                    containerColor = accent,
+                                    contentColor = FuelXColors.OnAccent
                                 ) {
                                     Text(text = queue.size.toString())
                                 }
@@ -152,45 +196,44 @@ fun NowPlayingScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                             contentDescription = "Queue",
-                            tint = if (queue.isNotEmpty()) AccentPrimary else TextPrimary
+                            tint = if (queue.isNotEmpty()) accent else Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-
-                IconButton(onClick = {
-                    coroutineScope.launch {
-                        scrollState.animateScrollTo(scrollState.maxValue)
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Subtitles,
-                        contentDescription = "Scroll to Lyrics",
-                        tint = AccentPrimary
-                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Large Album Art Box (intercepts touches so tapping cover never changes song)
-        TrackArtwork(
-            artworkUrl = track.displayArtwork,
-            contentDescription = "${track.title} artwork",
+        // Hero Album Art Box with Frosted Glass Edge Highlight (320dp Prominent Hero)
+        Box(
             modifier = Modifier
-                .size(260.dp)
+                .size(320.dp)
+                .graphicsLayer {
+                    scaleX = artworkScale
+                    scaleY = artworkScale
+                }
+                .clip(RoundedCornerShape(32.dp))
+                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(32.dp))
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
-                ) { /* Explicit no-op: cover tap must not trigger track switch */ },
-            shape = RoundedCornerShape(24.dp),
-            placeholderColor = AccentSecondary.copy(alpha = 0.2f),
-            placeholderText = "♪"
-        )
+                ) { /* Explicit no-op: cover tap must not trigger track switch */ }
+        ) {
+            TrackArtwork(
+                artworkUrl = track.displayArtwork,
+                contentDescription = "${track.title} artwork",
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(32.dp),
+                placeholderColor = Color(0xFF14151B),
+                placeholderText = "♪"
+            )
+        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(26.dp))
 
-        // Title & Artist with Favorite Button
+        // Title & Artist with Symmetrical Glass Action Controls (Favorite & 3-Dot Menu)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -199,98 +242,180 @@ fun NowPlayingScreen(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.Start
             ) {
-                Text(
+                ContinuousScrollText(
                     text = track.title,
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 26.sp,
+                        lineHeight = 32.sp
+                    ),
+                    color = Color.White,
+                    velocity = 35.dp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodyLarge.copy(color = TextSecondary),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                val cleanArtist = cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
+                val rawAlbum = track.album?.let { cleanArtistString(it) }.orEmpty()
+                val cleanAlbum = rawAlbum.takeIf {
+                    it.isNotBlank() && 
+                    it != track.title && 
+                    it != "YouTube Music" && 
+                    it != "," &&
+                    it != "•" &&
+                    !cleanArtist.contains(it, ignoreCase = true)
+                }
+                val subtitleText = buildString {
+                    append(cleanArtist)
+                    if (cleanAlbum != null) {
+                        append(" • ")
+                        append(cleanAlbum)
+                    }
+                }
+                ContinuousScrollText(
+                    text = subtitleText,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        color = Color.White.copy(alpha = 0.65f)
+                    ),
+                    color = Color.White.copy(alpha = 0.65f),
+                    velocity = 30.dp
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Download button
-                IconButton(
-                    onClick = {
-                        if (downloadState is DownloadState.Downloaded) {
-                            showRemoveDownloadDialog = true
-                        } else {
-                            onDownloadClick()
-                        }
-                    },
-                    modifier = Modifier.size(44.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Favorite button in frosted glass circle (42.dp)
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    modifier = Modifier.size(42.dp)
                 ) {
-                    when (downloadState) {
-                        is DownloadState.Downloading -> {
-                            val p = (downloadState as DownloadState.Downloading).progress
-                            if (p in 0f..1f) {
-                                CircularProgressIndicator(
-                                    progress = { p },
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.5.dp,
-                                    color = AccentPrimary
-                                )
-                            } else {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.5.dp,
-                                    color = AccentPrimary
-                                )
-                            }
-                        }
-                        is DownloadState.Downloaded -> {
-                            Icon(
-                                imageVector = Icons.Rounded.DownloadDone,
-                                contentDescription = "Downloaded offline",
-                                tint = AccentPrimary,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        else -> {
-                            Icon(
-                                imageVector = Icons.Rounded.Download,
-                                contentDescription = "Download for offline playback",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                            tint = if (isFavorite) accent else Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(4.dp))
+                // 3-Dot More Options button in frosted glass circle (42.dp) with Liquid Glass DropdownMenu
+                Box {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        IconButton(
+                            onClick = { showMoreMenu = true },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MoreVert,
+                                contentDescription = "More options",
+                                tint = Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
-                // Favorite button
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (isFavorite) AccentPrimary else TextSecondary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                        containerColor = Color(0xFF131520).copy(alpha = 0.78f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                        shadowElevation = 12.dp,
+                        modifier = Modifier
+                            .width(210.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    ) {
+                        // Add to Playlist
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Add to Playlist",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onAddToPlaylist()
+                            }
+                        )
 
-                Spacer(modifier = Modifier.width(4.dp))
+                        // Divider line
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.08f))
+                        )
 
-                // Add to playlist button
-                IconButton(
-                    onClick = onAddToPlaylist,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                        contentDescription = "Add to playlist",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(28.dp)
-                    )
+                        // Download / Remove Download
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (downloadState is DownloadState.Downloaded) "Remove Download" else "Download Track",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            },
+                            leadingIcon = {
+                                when (downloadState) {
+                                    is DownloadState.Downloading -> {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = accent
+                                        )
+                                    }
+                                    is DownloadState.Downloaded -> {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DownloadDone,
+                                            contentDescription = null,
+                                            tint = accent,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    else -> {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Download,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.85f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                if (downloadState is DownloadState.Downloaded) {
+                                    showRemoveDownloadDialog = true
+                                } else {
+                                    onDownloadClick()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -301,8 +426,7 @@ fun NowPlayingScreen(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = AccentSecondary.copy(alpha = 0.15f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, AccentSecondary.copy(alpha = 0.4f))
+                color = AccentSecondary.copy(alpha = 0.15f)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -349,14 +473,14 @@ fun NowPlayingScreen(
                 isDragging = false
             },
             colors = SliderDefaults.colors(
-                thumbColor = AccentPrimary,
-                activeTrackColor = AccentPrimary,
-                inactiveTrackColor = DarkSurfaceVariant
+                thumbColor = accent,
+                activeTrackColor = accent,
+                inactiveTrackColor = FuelXColors.Surface3
             ),
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Time indicators
+        // Time indicators with tabular numbers
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -365,94 +489,142 @@ fun NowPlayingScreen(
             val currSeconds = (displayMs / 1000).coerceAtLeast(0L)
             val currText = "${currSeconds / 60}:${(currSeconds % 60).toString().padStart(2, '0')}"
 
-            val totalText = if (effectiveDuration > 0L) {
-                val totalSeconds = (effectiveDuration / 1000).coerceAtLeast(0L)
-                "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"
+            val remainingMs = (effectiveDuration - displayMs).coerceAtLeast(0L)
+            val remSecs = (remainingMs / 1000).coerceAtLeast(0L)
+            val remText = if (effectiveDuration > 0L) {
+                "-${remSecs / 60}:${(remSecs % 60).toString().padStart(2, '0')}"
             } else {
                 "--:--"
             }
 
-            Text(text = currText, style = MaterialTheme.typography.labelSmall)
-            Text(text = totalText, style = MaterialTheme.typography.labelSmall)
+            Text(
+                text = currText,
+                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                color = FuelXColors.TextTertiary
+            )
+            Text(
+                text = remText,
+                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                color = FuelXColors.TextTertiary
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Controls
+        // Transport Controls
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            IconButton(onClick = { isShuffle = !isShuffle }) {
-                Icon(
-                    imageVector = Icons.Rounded.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (isShuffle) AccentPrimary else TextMuted
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                IconButton(onClick = { isShuffle = !isShuffle }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (isShuffle) accent else FuelXColors.TextTertiary
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(if (isShuffle) accent else Color.Transparent)
                 )
             }
 
-            IconButton(onClick = onPreviousClick) {
+            IconButton(
+                onClick = onPreviousClick,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Rounded.SkipPrevious,
                     contentDescription = "Previous",
-                    tint = TextPrimary,
+                    tint = FuelXColors.TextPrimary,
                     modifier = Modifier.size(36.dp)
                 )
             }
 
-            // Big Play/Pause Button
+            // Big 80dp Hero Play/Pause Button
             Box(
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(80.dp)
                     .clip(CircleShape)
-                    .background(AccentPrimary),
+                    .background(accent)
+                    .pressableScale(onClick = onPlayPauseClick),
                 contentAlignment = Alignment.Center
             ) {
-                IconButton(onClick = onPlayPauseClick, modifier = Modifier.fillMaxSize()) {
-                    if (isBuffering) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(36.dp),
-                            strokeWidth = 3.dp,
-                            color = DarkBackground
-                        )
-                    } else {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = DarkBackground,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
+                if (isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                    )
+                }
+
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(38.dp),
+                        strokeWidth = 3.dp,
+                        color = FuelXColors.OnAccent
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = FuelXColors.OnAccent,
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
             }
 
-            IconButton(onClick = onNextClick) {
+            IconButton(
+                onClick = onNextClick,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Rounded.SkipNext,
                     contentDescription = "Next",
-                    tint = TextPrimary,
+                    tint = FuelXColors.TextPrimary,
                     modifier = Modifier.size(36.dp)
                 )
             }
 
-            IconButton(onClick = { isRepeat = !isRepeat }) {
-                Icon(
-                    imageVector = Icons.Rounded.Repeat,
-                    contentDescription = "Repeat",
-                    tint = if (isRepeat) AccentPrimary else TextMuted
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                IconButton(onClick = { isRepeat = !isRepeat }) {
+                    Icon(
+                        imageVector = Icons.Rounded.Repeat,
+                        contentDescription = "Repeat",
+                        tint = if (isRepeat) accent else FuelXColors.TextTertiary
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(if (isRepeat) accent else Color.Transparent)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Rolling Synchronized Lyrics Card
+        // Rolling Synchronized Lyrics Card (Liquid Glass)
         RollingLyricsCard(
             parsedLyrics = parsedLyrics,
             isLyricsLoading = isLyricsLoading,
             lyricsError = lyricsError,
             currentPositionMs = currentPositionMs,
+            artworkUrl = track.displayArtwork,
+            isExpanded = isLyricsExpanded,
+            onToggleExpand = { isLyricsExpanded = !isLyricsExpanded },
             onSeekTo = onSeekTo,
             onRetryLyrics = onRetryLyrics
         )
@@ -662,6 +834,7 @@ fun NowPlayingScreen(
         }
     }
 }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -670,13 +843,26 @@ private fun RollingLyricsCard(
     isLyricsLoading: Boolean,
     lyricsError: String?,
     currentPositionMs: Long,
+    artworkUrl: String?,
+    isExpanded: Boolean = false,
+    onToggleExpand: () -> Unit = {},
     onSeekTo: (Long) -> Unit,
     onRetryLyrics: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val accent = LocalAccent.current
     val listState = rememberLazyListState()
     val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
     var userScrolledAway by remember { mutableStateOf(false) }
+
+    val animatedHeight by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isExpanded) 460.dp else 295.dp,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "lyricsCardHeight"
+    )
 
     LaunchedEffect(isUserDragging) {
         if (isUserDragging) {
@@ -704,13 +890,14 @@ private fun RollingLyricsCard(
         }
     }
 
+    // Clean Translucent Lyrics Card
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(290.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = DarkSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, DarkSurfaceVariant.copy(alpha = 0.7f))
+            .height(animatedHeight),
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xFF14151C).copy(alpha = 0.70f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Card Header
@@ -721,55 +908,81 @@ private fun RollingLyricsCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "LYRICS",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    ),
-                    color = TextPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.clickable { onToggleExpand() }
+                ) {
+                    Text(
+                        text = "LYRICS",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.8.sp,
+                            fontSize = 11.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
+                        contentDescription = if (isExpanded) "Collapse Lyrics" else "Expand Lyrics",
+                        tint = Color.White.copy(alpha = 0.60f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
 
                 if (userScrolledAway && lines.isNotEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = AccentPrimary.copy(alpha = 0.18f),
+                        color = accent.copy(alpha = 0.20f),
+                        border = BorderStroke(0.5.dp, accent.copy(alpha = 0.40f)),
                         modifier = Modifier.clickable { userScrolledAway = false }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Sync,
                                 contentDescription = "Sync",
-                                tint = AccentPrimary,
-                                modifier = Modifier.size(14.dp)
+                                tint = accent,
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "Sync",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = AccentPrimary,
+                                color = accent,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 } else if (parsedLyrics?.isSynchronized == true) {
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = AccentPrimary.copy(alpha = 0.15f)
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White.copy(alpha = 0.10f),
+                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
                     ) {
-                        Text(
-                            text = "LIVE SYNC",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                letterSpacing = 1.sp
-                            ),
-                            color = AccentPrimary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(accent)
+                            )
+                            Text(
+                                text = "LIVE SYNC",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.sp
+                                ),
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -778,7 +991,7 @@ private fun RollingLyricsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(DarkSurfaceVariant.copy(alpha = 0.5f))
+                    .background(Color.White.copy(alpha = 0.08f))
             )
 
             // Content Body
@@ -793,7 +1006,7 @@ private fun RollingLyricsCard(
                     isLyricsLoading -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(
-                                color = AccentPrimary,
+                                color = accent,
                                 strokeWidth = 2.5.dp,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -801,7 +1014,7 @@ private fun RollingLyricsCard(
                             Text(
                                 text = "Loading synchronized lyrics...",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
+                                color = Color.White.copy(alpha = 0.65f)
                             )
                         }
                     }
@@ -811,7 +1024,7 @@ private fun RollingLyricsCard(
                             Text(
                                 text = lyricsError,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
+                                color = Color.White.copy(alpha = 0.70f),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -820,11 +1033,11 @@ private fun RollingLyricsCard(
                                 Icon(
                                     imageVector = Icons.Rounded.Refresh,
                                     contentDescription = null,
-                                    tint = AccentPrimary,
+                                    tint = accent,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Retry", color = AccentPrimary)
+                                Text("Retry", color = accent)
                             }
                         }
                     }
@@ -834,7 +1047,7 @@ private fun RollingLyricsCard(
                             Icon(
                                 imageVector = Icons.Rounded.MusicNote,
                                 contentDescription = null,
-                                tint = AccentPrimary,
+                                tint = accent,
                                 modifier = Modifier.size(36.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -842,13 +1055,13 @@ private fun RollingLyricsCard(
                                 text = "Instrumental Track",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                color = Color.White
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Enjoy the music — no lyrics for this song",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted
+                                color = Color.White.copy(alpha = 0.50f)
                             )
                         }
                     }
@@ -865,7 +1078,7 @@ private fun RollingLyricsCard(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontSize = 15.sp,
                                     lineHeight = 24.sp,
-                                    color = TextPrimary
+                                    color = Color.White.copy(alpha = 0.90f)
                                 )
                             )
                         }
@@ -875,7 +1088,7 @@ private fun RollingLyricsCard(
                         Text(
                             text = "No lyrics found for this song",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
+                            color = Color.White.copy(alpha = 0.50f)
                         )
                     }
 
@@ -893,16 +1106,22 @@ private fun RollingLyricsCard(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(14.dp))
                                         .background(
-                                            if (isActiveLine) AccentPrimary.copy(alpha = 0.12f)
+                                            if (isActiveLine) Color.White.copy(alpha = 0.12f)
                                             else Color.Transparent
+                                        )
+                                        .then(
+                                            if (isActiveLine) Modifier.border(
+                                                BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
+                                                RoundedCornerShape(14.dp)
+                                            ) else Modifier
                                         )
                                         .clickable {
                                             userScrolledAway = false
                                             onSeekTo(line.timeMs)
                                         }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        .padding(horizontal = 12.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (line.words.isNotEmpty()) {
@@ -917,10 +1136,10 @@ private fun RollingLyricsCard(
 
                                                 val targetColor = when {
                                                     isWordActive -> Color.White
-                                                    isWordPast && isActiveLine -> AccentPrimary
-                                                    isWordPast -> TextSecondary.copy(alpha = 0.7f)
-                                                    isActiveLine -> TextMuted.copy(alpha = 0.5f)
-                                                    else -> TextMuted.copy(alpha = 0.35f)
+                                                    isWordPast && isActiveLine -> accent
+                                                    isWordPast -> Color.White.copy(alpha = 0.55f)
+                                                    isActiveLine -> Color.White.copy(alpha = 0.40f)
+                                                    else -> Color.White.copy(alpha = 0.28f)
                                                 }
 
                                                 val animatedColor by animateColorAsState(
@@ -933,7 +1152,7 @@ private fun RollingLyricsCard(
                                                     text = word.text,
                                                     style = MaterialTheme.typography.titleMedium.copy(
                                                         fontSize = if (isActiveLine) 17.sp else 15.sp,
-                                                        fontWeight = if (isActiveLine) FontWeight.Bold else FontWeight.SemiBold,
+                                                        fontWeight = if (isWordActive) FontWeight.Bold else if (isActiveLine) FontWeight.SemiBold else FontWeight.Medium,
                                                         color = animatedColor
                                                     )
                                                 )
@@ -942,8 +1161,8 @@ private fun RollingLyricsCard(
                                     } else {
                                         val targetColor = when {
                                             isActiveLine -> Color.White
-                                            isPastLine -> TextSecondary.copy(alpha = 0.7f)
-                                            else -> TextMuted.copy(alpha = 0.4f)
+                                            isPastLine -> Color.White.copy(alpha = 0.55f)
+                                            else -> Color.White.copy(alpha = 0.30f)
                                         }
 
                                         val animatedColor by animateColorAsState(
@@ -971,5 +1190,28 @@ private fun RollingLyricsCard(
             }
         }
     }
+}
+
+@Composable
+private fun ContinuousScrollText(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    velocity: androidx.compose.ui.unit.Dp = 30.dp
+) {
+    Text(
+        text = text,
+        style = style,
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        modifier = modifier.basicMarquee(
+            iterations = Int.MAX_VALUE,
+            initialDelayMillis = 1200,
+            repeatDelayMillis = 1200,
+            velocity = velocity
+        )
+    )
 }
 
