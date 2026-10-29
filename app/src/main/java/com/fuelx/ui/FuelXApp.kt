@@ -2,6 +2,7 @@ package com.fuelx.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -229,55 +230,39 @@ fun FuelXApp() {
                 }
             },
             bottomBar = {
-                Column {
-                    // Mini Player (Only visible when not full screen)
-                    currentTrack?.let { track ->
-                        MiniPlayer(
-                            currentTrack = track,
-                            isPlaying = isPlaying,
-                            isBuffering = isBuffering,
-                            playbackError = playbackError,
-                            onRetryPlayback = { playerController.retryPlayback() },
-                            onPlayPauseClick = { playerController.togglePlayPause() },
-                            onNextClick = { playerController.skipNext() },
-                            onMiniPlayerClick = { isNowPlayingOpen = true }
-                        )
-                    }
-
-                    // Minimalist 3-Destination Navigation with 4dp Accent Dot
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = FuelXColors.Bg,
-                        tonalElevation = 0.dp
+                // Minimalist 3-Destination Navigation with 4dp Accent Dot - Solid background limited only to nav buttons
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = FuelXColors.Bg,
+                    tonalElevation = 0.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .height(56.dp)
+                            .padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .height(56.dp)
-                                .padding(horizontal = 24.dp),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            FuelXNavItem(
-                                imageVector = Icons.Rounded.Home,
-                                contentDescription = "Home",
-                                isSelected = selectedTab == ScreenTab.HOME,
-                                onClick = { selectedTab = ScreenTab.HOME }
-                            )
-                            FuelXNavItem(
-                                imageVector = Icons.Rounded.Search,
-                                contentDescription = "Search",
-                                isSelected = selectedTab == ScreenTab.SEARCH,
-                                onClick = { selectedTab = ScreenTab.SEARCH }
-                            )
-                            FuelXNavItem(
-                                imageVector = Icons.Rounded.LibraryMusic,
-                                contentDescription = "Library",
-                                isSelected = selectedTab == ScreenTab.LIBRARY,
-                                onClick = { selectedTab = ScreenTab.LIBRARY }
-                            )
-                        }
+                        FuelXNavItem(
+                            imageVector = Icons.Rounded.Home,
+                            contentDescription = "Home",
+                            isSelected = selectedTab == ScreenTab.HOME,
+                            onClick = { selectedTab = ScreenTab.HOME }
+                        )
+                        FuelXNavItem(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = "Search",
+                            isSelected = selectedTab == ScreenTab.SEARCH,
+                            onClick = { selectedTab = ScreenTab.SEARCH }
+                        )
+                        FuelXNavItem(
+                            imageVector = Icons.Rounded.LibraryMusic,
+                            contentDescription = "Library",
+                            isSelected = selectedTab == ScreenTab.LIBRARY,
+                            onClick = { selectedTab = ScreenTab.LIBRARY }
+                        )
                     }
                 }
             }
@@ -439,6 +424,40 @@ fun FuelXApp() {
                                 onBackClick = { selectedTab = ScreenTab.HOME }
                             )
                         }
+                    }
+                }
+
+                // Mini Player floating pill above navigation bar
+                AnimatedVisibility(
+                    visible = currentTrack != null && !isNowPlayingOpen,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 6.dp),
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy)
+                    ) + fadeIn(animationSpec = tween(240)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = tween(200)
+                    ) + fadeOut(animationSpec = tween(150))
+                ) {
+                    currentTrack?.let { track ->
+                        MiniPlayer(
+                            currentTrack = track,
+                            isPlaying = isPlaying,
+                            isBuffering = isBuffering,
+                            playbackError = playbackError,
+                            currentPositionMs = currentPositionMs,
+                            durationMs = durationMs,
+                            accentColor = currentAccent,
+                            onRetryPlayback = { playerController.retryPlayback() },
+                            onPlayPauseClick = { playerController.togglePlayPause() },
+                            onPreviousClick = { playerController.skipPrevious() },
+                            onNextClick = { playerController.skipNext() },
+                            onSeekTo = { posMs -> playerController.seekTo(posMs) },
+                            onMiniPlayerClick = { isNowPlayingOpen = true }
+                        )
                     }
                 }
             }
