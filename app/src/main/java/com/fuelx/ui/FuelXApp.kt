@@ -34,7 +34,9 @@ import com.fuelx.data.TrackDownloadManager
 import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import com.fuelx.playback.PlayerController
+import androidx.compose.ui.zIndex
 import com.fuelx.ui.components.AddToPlaylistDialog
+import com.fuelx.ui.components.GlassSnackbar
 import com.fuelx.ui.components.LanguageSelectionDialog
 import com.fuelx.ui.components.MiniPlayer
 import com.fuelx.ui.home.HomeScreen
@@ -84,7 +86,14 @@ fun FuelXApp() {
 
     val onToggleFavorite: (Track) -> Unit = { track ->
         coroutineScope.launch {
+            val wasFav = favorites.any { it.id == track.id }
             libraryRepository.toggleFavorite(track)
+            val msg = if (!wasFav) "Added to favourites" else "Removed from favourites"
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Short
+            )
         }
     }
 
@@ -200,7 +209,7 @@ fun FuelXApp() {
                 .background(DarkBackground)
         ) {
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            snackbarHost = {},
             topBar = {
                 AnimatedVisibility(
                     visible = !isOnline,
@@ -403,6 +412,13 @@ fun FuelXApp() {
                                 },
                                 onDeleteDownload = { track ->
                                     downloadManager.deleteDownload(track.id)
+                                    coroutineScope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        snackbarHostState.showSnackbar(
+                                            message = "Removed from downloads",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
                                 },
                                 onClearHistory = {
                                     coroutineScope.launch {
@@ -507,10 +523,28 @@ fun FuelXApp() {
                 onClearQueue = { playerController.clearQueue() },
                 onPlayFromQueue = { index -> playerController.playFromQueue(index) },
                 onDownloadClick = {
-                    currentTrack?.let { downloadManager.downloadTrack(it) }
+                    currentTrack?.let { track ->
+                        downloadManager.downloadTrack(track)
+                        coroutineScope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = "Added to downloads",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
                 },
                 onDeleteDownload = {
-                    currentTrack?.let { downloadManager.deleteDownload(it.id) }
+                    currentTrack?.let { track ->
+                        downloadManager.deleteDownload(track.id)
+                        coroutineScope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = "Removed from downloads",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
                 },
                 onPlayPauseClick = { playerController.togglePlayPause() },
                 onPreviousClick = { playerController.skipPrevious() },
@@ -536,7 +570,8 @@ fun FuelXApp() {
                 onSelectPlaylist = { playlist ->
                     coroutineScope.launch {
                         val added = libraryRepository.addTrackToPlaylist(playlist.id, track)
-                        val msg = if (added) "Added to \"${playlist.name}\"" else "Already in \"${playlist.name}\""
+                        val msg = if (added) "Added to playlist \"${playlist.name}\"" else "Already in playlist \"${playlist.name}\""
+                        snackbarHostState.currentSnackbarData?.dismiss()
                         snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
                     }
                 },
@@ -545,7 +580,8 @@ fun FuelXApp() {
                         val newId = libraryRepository.createPlaylist(name)
                         if (newId != -1L) {
                             libraryRepository.addTrackToPlaylist(newId, track)
-                            snackbarHostState.showSnackbar("Added to \"$name\"", duration = SnackbarDuration.Short)
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar("Added to playlist \"$name\"", duration = SnackbarDuration.Short)
                         }
                     }
                 }
@@ -568,6 +604,18 @@ fun FuelXApp() {
                     }
                 }
             )
+        }
+
+        // Global Liquid Glass Notification Host - Floats above all screens, sheets & dialogs
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 16.dp, start = 20.dp, end = 20.dp)
+                .zIndex(999f)
+        ) { data ->
+            GlassSnackbar(snackbarData = data)
         }
     }
 }
