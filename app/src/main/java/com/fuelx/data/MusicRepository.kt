@@ -12,6 +12,7 @@ interface MusicRepository {
     suspend fun getTrending(languages: Set<String>): Result<List<Track>> = getTrending()
     suspend fun getGenreTracks(genreId: String, languages: Set<String>): Result<List<Track>>
     suspend fun search(query: String): Result<List<Track>>
+    suspend fun getRadio(seedVideoId: String): Result<List<Track>>
     suspend fun resolveStream(trackId: String, forceRefresh: Boolean = false): Result<StreamInfo>
 }
 
@@ -74,6 +75,15 @@ class DefaultMusicRepository(
                 searchCache[trimmed] = results
             }
             Result.success(results)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getRadio(seedVideoId: String): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            val tracks = provider.getRadio(seedVideoId)
+            Result.success(tracks)
         } catch (e: Exception) {
             Result.failure(e)
         }

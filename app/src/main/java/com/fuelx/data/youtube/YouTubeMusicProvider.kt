@@ -65,4 +65,15 @@ class YouTubeMusicProvider(
             emptyList()
         }
     }
+
+    override suspend fun getRadio(seedVideoId: String): List<Track> {
+        return try {
+            val tracks = innertubeClient.getRadio(seedVideoId)
+            tracks.forEach { trackCache[it.id] = it }
+            tracks
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
 }

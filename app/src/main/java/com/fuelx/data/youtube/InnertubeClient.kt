@@ -586,8 +586,104 @@ class InnertubeClient(
         }
     }
 
+    suspend fun getRadio(seedVideoId: String): List<Track> = withContext(Dispatchers.IO) {
+        if (seedVideoId.isBlank()) return@withContext emptyList()
+        try {
+            val requestBodyJson = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB_REMIX")
+                        put("clientVersion", "1.20240401.01.00")
+                        put("hl", "en")
+                        put("gl", "US")
+                    })
+                })
+                put("videoId", seedVideoId)
+                put("playlistId", "RDAMVM$seedVideoId")
+                put("isAudioOnly", true)
+            }
+
+            val request = Request.Builder()
+                .url(NEXT_ENDPOINT)
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", "https://music.youtube.com/")
+                .header("Origin", "https://music.youtube.com")
+                .header("Content-Type", "application/json")
+                .post(requestBodyJson.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val body = response.body?.string() ?: return@withContext emptyList()
+                parseRadioResponse(JSONObject(body), seedVideoId)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    private fun parseRadioResponse(json: JSONObject, seedVideoId: String): List<Track> {
+        val results = mutableListOf<Track>()
+        val seenIds = mutableSetOf<String>()
+        seenIds.add(seedVideoId) // skip the seed song itself
+
+        val contents = json.optJSONObject("contents")
+            ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
+            ?.optJSONObject("tabbedRenderer")
+            ?.optJSONObject("watchNextTabbedResultsRenderer")
+            ?.optJSONArray("tabs")
+            ?.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("musicQueueRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("playlistPanelRenderer")
+            ?.optJSONArray("contents") ?: return emptyList()
+
+        for (i in 0 until contents.length()) {
+            val item = contents.optJSONObject(i) ?: continue
+            val renderer = item.optJSONObject("playlistPanelVideoRenderer") ?: continue
+
+            val videoId = renderer.optString("videoId")
+            if (videoId.isNullOrBlank() || !seenIds.add(videoId)) continue
+
+            val title = renderer.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            if (title.isNullOrBlank()) continue
+
+            val artistRuns = renderer.optJSONObject("longBylineText")?.optJSONArray("runs")
+                ?: renderer.optJSONObject("shortBylineText")?.optJSONArray("runs")
+            val artist = artistRuns?.optJSONObject(0)?.optString("text")?.let { cleanArtistString(it) } ?: "YouTube Music"
+
+            val lengthStr = renderer.optJSONObject("lengthText")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                ?: renderer.optJSONObject("lengthText")?.optString("simpleText")
+            val durationMs = if (!lengthStr.isNullOrBlank()) parseDurationStringToMs(lengthStr.trim()) else null
+
+            val thumbs = renderer.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+            val rawUrl = if (thumbs != null && thumbs.length() > 0) {
+                thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+            } else null
+            val thumbUrl = rawUrl?.replace(Regex("=w\\d+-h\\d+.*"), "=w544-h544-l90-rj")
+
+            results.add(
+                Track(
+                    id = videoId,
+                    title = cleanTitle(title),
+                    artist = artist,
+                    album = "YouTube Music",
+                    artworkUrl = thumbUrl,
+                    durationMs = durationMs,
+                    streamUri = null
+                )
+            )
+        }
+
+        return results
+    }
+
     companion object {
         private const val SEARCH_ENDPOINT = "https://music.youtube.com/youtubei/v1/search"
+        private const val NEXT_ENDPOINT = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }

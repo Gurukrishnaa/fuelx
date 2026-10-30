@@ -34,4 +34,9 @@ interface MusicProvider {
      * Get genre tracks filtered by genre and language preferences.
      */
     suspend fun getGenreTracks(genreId: String, languages: Set<String>): List<Track> = emptyList()
+
+    /**
+     * Get radio recommendations (similar tracks) for a given seed track ID.
+     */
+    suspend fun getRadio(seedVideoId: String): List<Track> = emptyList()
 }

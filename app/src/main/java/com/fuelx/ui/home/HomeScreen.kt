@@ -55,9 +55,6 @@ private val HOME_GENRES = listOf(
     HomeGenre("folk", "Folk & Indie")
 )
 
-// Maximum duration ceiling for individual songs (10 minutes). Longer tracks are multi-song mixes.
-private const val MAX_SONG_DURATION_MS = 10 * 60 * 1000L
-
 /**
  * Cinematic Glassmorphism & Exaggerated Minimalism Home Screen.
  * Features a spotlight Hero Song Card, frosted glass chips, liquid recent cards,
@@ -225,41 +222,38 @@ fun HomeScreen(
         }
     }
 
-    // Filter tracks to ensure no mix/jukebox longer than 10 minutes or compilation videos are shown
-    val isHomeCleanSong: (Track) -> Boolean = { track ->
-        val dur = track.durationMs
-        val durOk = dur == null || (dur in 45_000L..MAX_SONG_DURATION_MS)
-        val titleLower = track.title.lowercase()
-        val artistLower = track.artist.lowercase()
-        val isMix = titleLower.contains("jukebox") ||
-                titleLower.contains("dj mix") ||
-                titleLower.contains("mix") ||
-                titleLower.contains("hit songs") ||
-                titleLower.contains("all songs") ||
-                titleLower.contains("collection") ||
-                titleLower.contains("non stop") ||
-                titleLower.contains("nonstop") ||
-                titleLower.contains("greatest hits") ||
-                titleLower.contains("full album") ||
-                artistLower.contains("video") ||
-                artistLower.contains("dj") ||
-                artistLower.contains("mix")
-        durOk && !isMix
+    // Radio seeded by the last song you played
+    val radioSeed = recentlyPlayed.firstOrNull()
+    var radio by remember(radioSeed?.id) { mutableStateOf<List<Track>>(emptyList()) }
+
+    LaunchedEffect(radioSeed?.id) {
+        radio = radioSeed
+            ?.let { repository.getRadio(it.id).getOrDefault(emptyList()) }
+            ?.filter(HomeSuggestions::isCleanSong)
+            ?.filter { r -> recentlyPlayed.none { it.id == r.id } }
+            ?.take(12)
+            .orEmpty()
     }
 
-    val cleanTracks = remember(tracks) {
-        tracks.filter(isHomeCleanSong)
-    }
-    val cleanGenreTracks = remember(genreTracks) {
-        genreTracks.filter(isHomeCleanSong)
-    }
+    // Stable for 6 hours, so the list doesn't reshuffle while the app is open
+    val seed = remember { System.currentTimeMillis() / (6 * 3_600_000L) }
 
-    // Hero track is the top trending standalone hit
-    val heroTrack = cleanTracks.firstOrNull()
-    // Top songs slice (next 6 hits after hero, or first 6 if hero isn't shown)
-    val topSongs = remember(cleanTracks) {
-        if (cleanTracks.size > 1) cleanTracks.drop(1).take(6) else cleanTracks.take(6)
+    // Always call the latest isFavorite without recomputing suggestions when you tap a heart
+    val favLookup by rememberUpdatedState(isFavorite)
+
+    val cleanTracks = remember(tracks) { tracks.filter(HomeSuggestions::isCleanSong) }
+    val cleanGenreTracks = remember(genreTracks) { genreTracks.filter(HomeSuggestions::isCleanSong) }
+
+    val shelves = remember(tracks, radio, recentlyPlayed, selectedLanguages) {
+        HomeSuggestions.build(
+            pool = tracks + radio,
+            recent = recentlyPlayed,
+            isFavorite = { favLookup(it) },
+            currentId = null,          // keep null so the list doesn't change while a song plays
+            seed = seed
+        )
     }
+    val heroTrack = shelves.hero
 
     LazyColumn(
         modifier = modifier
@@ -366,63 +360,114 @@ fun HomeScreen(
             }
         }
 
-        // Section 1: Recently Listened (Always first if history exists)
+        // 1. Jump back in (history)
         if (recentlyPlayed.isNotEmpty()) {
             item {
-                SleekSectionHeader(
-                    title = "Recently Listened",
-                    badgeText = "HISTORY",
-                    icon = Icons.Rounded.History,
-                    iconTint = AccentPrimary
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(bottom = 20.dp)
-                ) {
-                    items(recentlyPlayed.take(10)) { track ->
-                        RecentTrackCard(
-                            track = track,
-                            isSelected = track.id == currentTrack?.id,
-                            isPlaying = track.id == currentTrack?.id && isPlaying,
-                            onClick = { onTrackSelect(track, recentlyPlayed) }
-                        )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SleekSectionHeader("Jump back in", "HISTORY", Icons.Rounded.History, AccentPrimary)
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(bottom = 4.dp)
+                    ) {
+                        items(recentlyPlayed.take(10), key = { it.id }) { track ->
+                            RecentTrackCard(
+                                track = track,
+                                isSelected = track.id == currentTrack?.id,
+                                isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onClick = { onTrackSelect(track, recentlyPlayed) }
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(20.dp))
                 }
             }
         }
 
-        // Section 2: Top Songs (Clean standalone hit singles based on language)
-        item {
-            val topTitle = if (selectedLanguages.isNotEmpty()) {
-                "Top ${selectedLanguages.joinToString(" • ")} Hits"
-            } else {
-                "Trending Hits"
+        // 2. Picked for you (personalised)
+        if (shelves.pickedForYou.isNotEmpty()) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SleekSectionHeader(
+                        title = "Picked for you",
+                        badgeText = if (recentlyPlayed.isEmpty()) "TRENDING" else "FOR YOU",
+                        icon = Icons.Rounded.AutoAwesome,
+                        iconTint = AccentPrimary,
+                        subtitle = if (recentlyPlayed.isEmpty()) "Play a few songs and this gets personal" else null
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(bottom = 4.dp)
+                    ) {
+                        items(shelves.pickedForYou, key = { it.id }) { track ->
+                            RecentTrackCard(
+                                track = track,
+                                isSelected = track.id == currentTrack?.id,
+                                isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onClick = { onTrackSelect(track, shelves.pickedForYou) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
             }
-            SleekSectionHeader(
-                title = topTitle,
-                badgeText = "CHARTS",
-                icon = Icons.Rounded.Whatshot,
-                iconTint = AccentSecondary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        itemsIndexed(topSongs) { index, track ->
-            val isCurrent = track.id == currentTrack?.id
-            TrackListItem(
-                track = track,
-                rank = index + 1,
-                isCurrent = isCurrent,
-                isPlaying = isCurrent && isPlaying,
-                isFav = isFavorite(track.id),
-                onToggleFav = { onToggleFavorite(track) },
-                onAddToQueue = { onAddToQueue(track) },
-                onAddToPlaylist = { onAddToPlaylist(track) },
-                onClick = { onTrackSelect(track, topSongs) }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+        // 3. Your Next Listen (Radio if non-empty, otherwise fallback to shelves.becauseTracks)
+        val becauseTracksToShow = if (radio.isNotEmpty()) radio else shelves.becauseTracks
+
+        if (becauseTracksToShow.isNotEmpty()) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SleekSectionHeader(
+                        title = "Your Next Listen",
+                        badgeText = if (radio.isNotEmpty()) "RADIO" else "FOR YOU",
+                        icon = Icons.Rounded.AutoAwesome,
+                        iconTint = AccentPrimary
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(bottom = 4.dp)
+                    ) {
+                        items(becauseTracksToShow, key = { it.id }) { track ->
+                            RecentTrackCard(
+                                track = track,
+                                isSelected = track.id == currentTrack?.id,
+                                isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onClick = { onTrackSelect(track, becauseTracksToShow) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+            }
+        }
+
+        // 4. Trending (chart order, ranked list, top 6)
+        if (shelves.trending.isNotEmpty()) {
+            item {
+                val title = if (selectedLanguages.isNotEmpty())
+                    "Top ${selectedLanguages.joinToString(" • ")} hits" else "Trending now"
+                SleekSectionHeader(title, "CHARTS", Icons.Rounded.Whatshot, AccentSecondary)
+                Spacer(Modifier.height(12.dp))
+            }
+            itemsIndexed(shelves.trending.take(6), key = { _, t -> t.id }) { index, track ->
+                val isCurrent = track.id == currentTrack?.id
+                TrackListItem(
+                    track = track,
+                    rank = index + 1,
+                    isCurrent = isCurrent,
+                    isPlaying = isCurrent && isPlaying,
+                    isFav = isFavorite(track.id),
+                    onToggleFav = { onToggleFavorite(track) },
+                    onAddToQueue = { onAddToQueue(track) },
+                    onAddToPlaylist = { onAddToPlaylist(track) },
+                    onClick = { onTrackSelect(track, shelves.trending) }
+                )
+                Spacer(Modifier.height(8.dp))
+            }
         }
 
         // Section 3: Genres (Curated shelves & interactive filter based on language)
@@ -605,14 +650,14 @@ private fun HeroSongCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Rounded.Whatshot,
+                            imageVector = Icons.Rounded.AutoAwesome,
                             contentDescription = null,
                             tint = AccentPrimary,
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "SPOTLIGHT #1",
+                            text = "PICKED FOR YOU",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 1.sp,
@@ -741,10 +786,13 @@ private fun SleekSectionHeader(
                 text = title,
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     letterSpacing = (-0.3).sp
                 ),
-                color = TextPrimary
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Box(
