@@ -895,21 +895,6 @@ private fun RecentTrackCard(
                     shape = RoundedCornerShape(12.dp),
                     placeholderColor = DarkSurfaceVariant
                 )
-                if (isSelected && isPlaying) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.60f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.GraphicEq,
-                            contentDescription = "Playing",
-                            tint = AccentPrimary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -1017,21 +1002,6 @@ private fun TrackListItem(
                     shape = RoundedCornerShape(10.dp),
                     placeholderColor = DarkSurfaceVariant
                 )
-                if (isCurrent && isPlaying) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.60f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.GraphicEq,
-                            contentDescription = "Playing",
-                            tint = AccentPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
