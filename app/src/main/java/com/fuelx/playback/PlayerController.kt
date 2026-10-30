@@ -73,6 +73,7 @@ class PlayerController(
     var playlist: List<Track> = emptyList()
         private set
     private var autoRetryCount = 0
+    private var pendingResumePositionMs: Long? = null
 
     companion object {
         private const val MAX_AUTO_RETRIES = 2
@@ -158,14 +159,23 @@ class PlayerController(
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val mediaId = mediaItem?.mediaId
                 val matched = playlist.find { it.id == mediaId }
+                val resumePos = pendingResumePositionMs
+                pendingResumePositionMs = null
+
+                val effectivePos = when {
+                    resumePos != null && resumePos > 0L -> resumePos
+                    reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> 0L
+                    else -> player.currentPosition.coerceAtLeast(0L)
+                }
+
                 if (matched != null) {
                     _currentTrack.value = matched
-                    preferences.saveLastPlayback(matched, 0L)
+                    preferences.saveLastPlayback(matched, effectivePos)
                     scope.launch {
                         libraryRepository.recordHistory(matched)
                     }
                 }
-                _currentPositionMs.value = 0L
+                _currentPositionMs.value = effectivePos
                 _durationMs.value = player.duration.coerceAtLeast(0L)
             }
 
@@ -260,37 +270,58 @@ class PlayerController(
         _durationMs.value = (matchedTrack.durationMs ?: 0L).coerceAtLeast(0L)
         _isPlaying.value = false
 
-        val player = controller ?: return
-
-        val mediaItems = tracks.map { t ->
+        val streamUri = matchedTrack.streamUri
+        if (!streamUri.isNullOrBlank()) {
+            val player = controller ?: return
             val metadata = MediaMetadata.Builder()
-                .setTitle(t.title)
-                .setArtist(t.artist)
-                .setAlbumTitle(t.album)
-                .setArtworkUri(if (!t.artworkUrl.isNullOrBlank()) Uri.parse(t.artworkUrl) else null)
+                .setTitle(matchedTrack.title)
+                .setArtist(matchedTrack.artist)
+                .setAlbumTitle(matchedTrack.album)
+                .setArtworkUri(if (!matchedTrack.artworkUrl.isNullOrBlank()) Uri.parse(matchedTrack.artworkUrl) else null)
                 .build()
 
-            MediaItem.Builder()
-                .setMediaId(t.id)
-                .setUri(t.streamUri)
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(matchedTrack.id)
+                .setUri(streamUri)
                 .setMimeType("audio/mp4")
                 .setMediaMetadata(metadata)
                 .build()
-        }
 
-        val startIndex = tracks.indexOfFirst { it.id == matchedTrack.id }.coerceAtLeast(0)
-        player.setMediaItems(mediaItems, startIndex, saved.positionMs)
-        player.prepare()
-        player.pause() // Stays paused at exact saved point
+            pendingResumePositionMs = saved.positionMs
+            player.setMediaItem(mediaItem, saved.positionMs)
+            player.prepare()
+            player.pause() // Stays paused at exact saved point
+        }
     }
 
-    fun playTrack(track: Track, tracks: List<Track> = playlist, forceRestart: Boolean = false) {
+    fun playTrack(
+        track: Track,
+        tracks: List<Track> = playlist,
+        forceRestart: Boolean = false,
+        startPositionMs: Long? = null
+    ) {
         this.playlist = tracks
         val player = controller
 
+        val isSameTrack = (_currentTrack.value?.id == track.id)
+        val targetPosition = when {
+            forceRestart -> 0L
+            startPositionMs != null -> startPositionMs
+            isSameTrack -> {
+                val activePos = _currentPositionMs.value
+                if (activePos > 0L) {
+                    activePos
+                } else {
+                    val saved = preferences.getLastPlayback()
+                    if (saved?.trackId == track.id && saved.positionMs > 0L) saved.positionMs else 0L
+                }
+            }
+            else -> 0L
+        }
+
         // If the exact same track is already active and loaded in ExoPlayer without errors,
         // do NOT restart from 0:00! Keep playing or resume seamlessly from the current position.
-        if (!forceRestart && player != null && _currentTrack.value?.id == track.id && player.currentMediaItem?.mediaId == track.id && _playbackError.value == null) {
+        if (!forceRestart && player != null && isSameTrack && player.currentMediaItem?.mediaId == track.id && _playbackError.value == null) {
             if (!player.isPlaying) {
                 if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                     player.prepare()
@@ -306,14 +337,15 @@ class PlayerController(
         stopPositionUpdates(saveCurrentPlayerPosition = false)
         controller?.pause()
         _currentTrack.value = track
-        // Immediately reset position and previous duration so timer and progress bar start at 0:00
-        _currentPositionMs.value = 0L
+        // Maintain target position so UI immediately shows the accurate progress
+        _currentPositionMs.value = targetPosition
         _durationMs.value = track.durationMs ?: 0L
 
         _isBuffering.value = true
         _playbackError.value = null
+        pendingResumePositionMs = targetPosition
 
-        preferences.saveLastPlayback(track, 0L)
+        preferences.saveLastPlayback(track, targetPosition)
         scope.launch {
             libraryRepository.recordHistory(track)
         }
@@ -374,7 +406,7 @@ class PlayerController(
                     .setMediaMetadata(metadata)
                     .build()
 
-                player.setMediaItem(mediaItem, /* startPositionMs = */ 0L)
+                player.setMediaItem(mediaItem, targetPosition)
                 player.prepare()
                 player.play()
                 return@launch
@@ -437,7 +469,7 @@ class PlayerController(
                 .setMediaMetadata(metadata)
                 .build()
 
-            player.setMediaItem(mediaItem, /* startPositionMs = */ 0L)
+            player.setMediaItem(mediaItem, targetPosition)
             player.prepare()
             player.play()
         }
@@ -452,10 +484,12 @@ class PlayerController(
             preferences.savePositionOnly(player.currentPosition)
         } else {
             // If there is an active error, or no media item loaded, or the loaded item does not match the active track,
-            // re-trigger playTrack for the current track rather than resuming a stale/mismatched media item
+            // re-trigger playTrack for the current track while preserving the current paused/saved position!
             if (_playbackError.value != null || player.currentMediaItem == null || player.currentMediaItem?.mediaId != current?.id) {
                 if (current != null) {
-                    playTrack(current, playlist)
+                    val resumePos = _currentPositionMs.value.takeIf { it > 0L }
+                        ?: preferences.getLastPlayback()?.positionMs?.takeIf { it > 0L }
+                    playTrack(current, playlist, forceRestart = false, startPositionMs = resumePos)
                 }
                 return
             }

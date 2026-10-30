@@ -8,33 +8,53 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
  * Robust client for the open-source LRCLIB lyrics service (https://lrclib.net/).
- * Resolves both synchronized (time-coded) and plain-text lyrics for songs.
+ * Resolves both synchronized (time-coded) and plain-text lyrics for songs
+ * with intelligent metadata normalization and automated retry resilience.
  */
 class LrclibClient(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 ) {
 
     suspend fun fetchLyrics(track: Track): Result<ParsedLyrics> = withContext(Dispatchers.IO) {
         try {
-            // Strategy 1: Exact lookup via /api/get
-            val exactResult = fetchExact(track)
-            if (exactResult != null) {
-                return@withContext Result.success(exactResult)
+            val cleanTitle = cleanTrackTitle(track.title)
+            val primaryArt = extractPrimaryArtist(track.artist)
+            val fullArt = track.artist.replace(Regex("""(?i)\s*-\s*Topic"""), "").trim()
+
+            // Strategy 1: Exact lookup with cleaned title + primary artist
+            fetchExact(cleanTitle, primaryArt)?.let { return@withContext Result.success(it) }
+
+            // Strategy 2: If primary artist differs from full artist, try full artist
+            if (primaryArt != fullArt && fullArt.isNotBlank()) {
+                fetchExact(cleanTitle, fullArt)?.let { return@withContext Result.success(it) }
             }
 
-            // Strategy 2: Search fallback via /api/search
-            val searchResult = fetchViaSearch(track)
-            if (searchResult != null) {
-                return@withContext Result.success(searchResult)
+            // Strategy 3: Raw cleaned title if it differed from stripped cleanTitle
+            val rawTitle = track.title.replace("\"", "").trim()
+            if (rawTitle != cleanTitle && rawTitle.isNotBlank()) {
+                fetchExact(rawTitle, primaryArt)?.let { return@withContext Result.success(it) }
+            }
+
+            // Strategy 4: Field-based search via /api/search?track_name=...&artist_name=...
+            fetchSearchByFields(cleanTitle, primaryArt)?.let { return@withContext Result.success(it) }
+
+            // Strategy 5: Query search via /api/search?q=cleanTitle primaryArtist
+            fetchViaSearch("$cleanTitle $primaryArt")?.let { return@withContext Result.success(it) }
+
+            // Strategy 6: Query search with cleanTitle only
+            if (cleanTitle.length >= 3) {
+                fetchViaSearch(cleanTitle)?.let { return@withContext Result.success(it) }
             }
 
             Result.failure(NoSuchElementException("No lyrics available for \"${track.title}\""))
@@ -43,39 +63,11 @@ class LrclibClient(
         }
     }
 
-    private fun fetchExact(track: Track): ParsedLyrics? {
-        val uriBuilder = Uri.parse("$BASE_URL/api/get").buildUpon()
-            .appendQueryParameter("track_name", cleanTrackTitle(track.title))
-            .appendQueryParameter("artist_name", track.artist)
-
-        track.album?.takeIf { it.isNotBlank() }?.let {
-            uriBuilder.appendQueryParameter("album_name", it)
-        }
-
-        track.durationMs?.let {
-            val seconds = it / 1000
-            if (seconds > 0) {
-                uriBuilder.appendQueryParameter("duration", seconds.toString())
-            }
-        }
-
-        val request = Request.Builder()
-            .url(uriBuilder.build().toString())
-            .header("User-Agent", USER_AGENT)
-            .get()
-            .build()
-
-        return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val bodyString = response.body?.string() ?: return null
-            parseLrclibResponse(JSONObject(bodyString))
-        }
-    }
-
-    private fun fetchViaSearch(track: Track): ParsedLyrics? {
-        val query = "${cleanTrackTitle(track.title)} ${track.artist}".trim()
-        val uri = Uri.parse("$BASE_URL/api/search").buildUpon()
-            .appendQueryParameter("q", query)
+    private fun fetchExact(trackTitle: String, artistName: String): ParsedLyrics? {
+        if (trackTitle.isBlank() || artistName.isBlank()) return null
+        val uri = Uri.parse("$BASE_URL/api/get").buildUpon()
+            .appendQueryParameter("track_name", trackTitle)
+            .appendQueryParameter("artist_name", artistName)
             .build()
 
         val request = Request.Builder()
@@ -84,27 +76,104 @@ class LrclibClient(
             .get()
             .build()
 
-        return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val bodyString = response.body?.string() ?: return null
-            val array = JSONArray(bodyString)
-            if (array.length() == 0) return null
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            parseLrclibResponse(JSONObject(bodyString))
+        }
+    }
 
-            // Prioritize items that have synchronized lyrics
-            var fallbackPlain: ParsedLyrics? = null
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                val parsed = parseLrclibResponse(item)
-                if (parsed != null) {
-                    if (parsed.isSynchronized) {
-                        return parsed
-                    } else if (fallbackPlain == null) {
-                        fallbackPlain = parsed
-                    }
+    private fun fetchSearchByFields(trackTitle: String, artistName: String): ParsedLyrics? {
+        if (trackTitle.isBlank()) return null
+        val uriBuilder = Uri.parse("$BASE_URL/api/search").buildUpon()
+            .appendQueryParameter("track_name", trackTitle)
+        if (artistName.isNotBlank()) {
+            uriBuilder.appendQueryParameter("artist_name", artistName)
+        }
+
+        val request = Request.Builder()
+            .url(uriBuilder.build().toString())
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            parseSearchResultArray(bodyString)
+        }
+    }
+
+    private fun fetchViaSearch(query: String): ParsedLyrics? {
+        if (query.isBlank()) return null
+        val uri = Uri.parse("$BASE_URL/api/search").buildUpon()
+            .appendQueryParameter("q", query.trim())
+            .build()
+
+        val request = Request.Builder()
+            .url(uri.toString())
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            parseSearchResultArray(bodyString)
+        }
+    }
+
+    private fun parseSearchResultArray(bodyString: String): ParsedLyrics? {
+        val array = JSONArray(bodyString)
+        if (array.length() == 0) return null
+
+        var fallbackPlain: ParsedLyrics? = null
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            val parsed = parseLrclibResponse(item)
+            if (parsed != null) {
+                if (parsed.isSynchronized) {
+                    return parsed
+                } else if (fallbackPlain == null) {
+                    fallbackPlain = parsed
                 }
             }
-            fallbackPlain
         }
+        return fallbackPlain
+    }
+
+    private fun executeWithRetry(request: Request, maxRetries: Int = 2): Response? {
+        var delayMs = 350L
+        for (attempt in 0..maxRetries) {
+            try {
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    return response
+                }
+                val code = response.code
+                // 503 Server Overloaded or 429 Too Many Requests -> auto retry with exponential backoff
+                if (code == 503 || code == 429) {
+                    response.close()
+                    if (attempt < maxRetries) {
+                        Thread.sleep(delayMs)
+                        delayMs *= 2
+                        continue
+                    }
+                } else {
+                    return response
+                }
+            } catch (e: Exception) {
+                if (attempt < maxRetries) {
+                    Thread.sleep(delayMs)
+                    delayMs *= 2
+                    continue
+                }
+            }
+        }
+        return null
     }
 
     private fun parseLrclibResponse(json: JSONObject): ParsedLyrics? {
@@ -135,17 +204,35 @@ class LrclibClient(
     }
 
     /**
-     * Cleans common metadata suffixes like "(Official Music Video)", "[Remastered]", etc.
-     * for higher LRCLIB matching hit rates.
+     * Cleans common metadata suffixes like "(From "Movie")", "(Official Music Video)",
+     * "[Remastered]", " | Sony Music", etc. for higher LRCLIB matching hit rates.
      */
     private fun cleanTrackTitle(title: String): String {
-        return title
-            .replace(Regex("\\s*[\\(\\[](?:feat\\.?|ft\\.?|official|remastered|lyrics|video|audio).*?[\\)\\]]", RegexOption.IGNORE_CASE), "")
-            .trim()
+        var cleaned = title
+        // 1. Strip (From "Movie"), [From "Movie"], (From Movie), etc.
+        cleaned = cleaned.replace(Regex("""(?i)\s*[\(\[]from\s+.*?[\)\]]"""), "")
+        // 2. Strip standard suffixes like (feat. ...), [Official Video], (Audio), (Lyrics), (Remastered), etc.
+        cleaned = cleaned.replace(Regex("""(?i)\s*[\(\[](?:feat\.?|ft\.?|official|music\s+video|video|audio|lyric(?:al)?(?:\s+video)?|remaster(?:ed)?|ost|soundtrack|full\s+song|visualizer).*?[\)\]]"""), "")
+        // 3. Strip trailing pipes or hyphens with suffixes like " | Movie Name" or " - Single"
+        cleaned = cleaned.replace(Regex("""(?i)\s*\|\s*.*$"""), "")
+        cleaned = cleaned.replace(Regex("""(?i)\s*-\s*(?:single|ep|official|audio|video|lyric.*|from\s+.*)$"""), "")
+        // 4. Strip stray double quotes which break query syntax
+        cleaned = cleaned.replace("\"", "").trim()
+        return cleaned.ifBlank { title.replace("\"", "").trim() }
+    }
+
+    /**
+     * Extracts the primary artist from collaborative strings such as
+     * "Anirudh Ravichander, Deepthi Suresh" -> "Anirudh Ravichander"
+     */
+    private fun extractPrimaryArtist(artist: String): String {
+        val withoutTopic = artist.replace(Regex("""(?i)\s*-\s*Topic"""), "")
+        val primary = withoutTopic.split(Regex("""(?i)\s*(?:,|&|•|\bfeat\.?\b|\bft\.?\b|/)\s*""")).firstOrNull()?.trim()
+        return if (!primary.isNullOrBlank()) primary else withoutTopic.trim()
     }
 
     companion object {
         private const val BASE_URL = "https://lrclib.net"
-        private const val USER_AGENT = "FuelX/1.0 (https://github.com/Gurukrishnaa/fuelx)"
+        private const val USER_AGENT = "FuelX/1.0 (Android; music-player)"
     }
 }
