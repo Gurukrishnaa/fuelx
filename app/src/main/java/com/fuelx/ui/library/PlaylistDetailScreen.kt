@@ -1,6 +1,8 @@
 package com.fuelx.ui.library
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -26,6 +29,7 @@ import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
+import com.fuelx.util.cleanArtistString
 
 @Composable
 fun PlaylistDetailScreen(
@@ -37,6 +41,8 @@ fun PlaylistDetailScreen(
     onDeletePlaylist: () -> Unit,
     onRenamePlaylist: (String) -> Unit,
     onBackClick: () -> Unit,
+    onAddToQueue: (Track) -> Unit = {},
+    onAddToPlaylist: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showDeletePlaylistDialog by remember { mutableStateOf(false) }
@@ -157,7 +163,6 @@ fun PlaylistDetailScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
         // Top Navigation Bar
@@ -213,29 +218,47 @@ fun PlaylistDetailScreen(
             contentPadding = PaddingValues(bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Hero / Playlist Header Card
+            // Hero / Playlist Header Card with Liquid Frosted Glass
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                val headerShape = RoundedCornerShape(22.dp)
+                val headerBorder = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.05f)
+                    )
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(headerShape)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF16161D).copy(alpha = 0.85f),
+                                    Color(0xFF0F0F14).copy(alpha = 0.92f)
+                                )
+                            )
+                        )
+                        .border(BorderStroke(1.dp, headerBorder), headerShape)
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // Artwork or Fallback Cover
                         Box(
                             modifier = Modifier
                                 .size(140.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(AccentPrimary.copy(alpha = 0.4f), DarkSurfaceVariant)
+                                        colors = listOf(AccentPrimary.copy(alpha = 0.35f), DarkSurfaceVariant)
                                     )
-                                ),
+                                )
+                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(18.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             if (!playlist.coverArtwork.isNullOrBlank()) {
@@ -243,7 +266,7 @@ fun PlaylistDetailScreen(
                                     artworkUrl = playlist.coverArtwork,
                                     contentDescription = playlist.name,
                                     modifier = Modifier.fillMaxSize(),
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     placeholderColor = Color.Transparent,
                                     placeholderText = ""
                                 )
@@ -272,11 +295,11 @@ fun PlaylistDetailScreen(
                         Text(
                             text = "${playlist.trackCount} ${if (playlist.trackCount == 1) "song" else "songs"}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
+                            color = TextSecondary.copy(alpha = 0.75f)
                         )
 
                         if (playlist.tracks.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(18.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -287,18 +310,21 @@ fun PlaylistDetailScreen(
                                     onClick = {
                                         onPlayTrack(playlist.tracks.first(), playlist.tracks)
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = AccentPrimary,
+                                        contentColor = FuelXColors.OnAccent
+                                    ),
                                     shape = RoundedCornerShape(24.dp),
                                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
                                         contentDescription = "Play All",
-                                        tint = DarkBackground,
+                                        tint = FuelXColors.OnAccent,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Play All", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                    Text("Play All", fontWeight = FontWeight.Bold)
                                 }
 
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -309,23 +335,25 @@ fun PlaylistDetailScreen(
                                         onPlayTrack(shuffled.first(), shuffled)
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
                                     shape = RoundedCornerShape(24.dp),
                                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Shuffle,
                                         contentDescription = "Shuffle",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = TextPrimary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Shuffle")
+                                    Text("Shuffle", fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
             // Empty state if playlist has no tracks
@@ -367,7 +395,9 @@ fun PlaylistDetailScreen(
                         isCurrent = isCurrent,
                         isPlaying = isCurrent && isPlaying,
                         onClick = { onPlayTrack(track, playlist.tracks) },
-                        onRemove = { trackToRemove = track }
+                        onRemove = { trackToRemove = track },
+                        onAddToQueue = { onAddToQueue(track) },
+                        onAddToPlaylist = { onAddToPlaylist(track) }
                     )
                 }
             }
@@ -382,41 +412,75 @@ private fun PlaylistTrackItem(
     isCurrent: Boolean,
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onAddToPlaylist: () -> Unit
 ) {
-    Card(
+    val cleanArtist = remember(track.artist) {
+        cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
+    }
+    val itemShape = RoundedCornerShape(16.dp)
+    val itemBg = if (isCurrent) {
+        Brush.horizontalGradient(
+            listOf(
+                AccentPrimary.copy(alpha = 0.16f),
+                Color(0xFF16161E).copy(alpha = 0.75f)
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            listOf(
+                Color(0xFF131318).copy(alpha = 0.65f),
+                Color(0xFF0F0F13).copy(alpha = 0.75f)
+            )
+        )
+    }
+    val itemBorder = if (isCurrent) {
+        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+    } else {
+        BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) DarkSurfaceVariant else DarkSurface
-        )
+            .clip(itemShape)
+            .background(itemBg)
+            .border(itemBorder, itemShape)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Index number
             Text(
-                text = index.toString(),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = if (isCurrent) AccentPrimary else TextSecondary,
-                modifier = Modifier.width(28.dp)
+                text = index.toString().padStart(2, '0'),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.SemiBold,
+                    fontSize = 13.sp
+                ),
+                color = if (isCurrent) AccentPrimary else TextSecondary.copy(alpha = 0.5f),
+                modifier = Modifier.width(26.dp)
             )
+
+            Spacer(modifier = Modifier.width(4.dp))
 
             // Artwork
             Box(
-                modifier = Modifier.size(46.dp),
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 TrackArtwork(
                     artworkUrl = track.displayArtwork,
                     contentDescription = track.title,
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     placeholderColor = AccentPrimary.copy(alpha = 0.15f),
                     placeholderText = "♪"
                 )
@@ -424,8 +488,7 @@ private fun PlaylistTrackItem(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(DarkBackground.copy(alpha = 0.65f)),
+                            .background(Color.Black.copy(alpha = 0.60f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -445,16 +508,27 @@ private fun PlaylistTrackItem(
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isCurrent) AccentPrimary else TextPrimary
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        letterSpacing = (-0.2).sp
                     ),
+                    color = if (isCurrent) AccentPrimary else TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                val subtitle = if (!track.album.isNullOrBlank()) {
+                    "$cleanArtist • ${cleanArtistString(track.album)}"
+                } else {
+                    cleanArtist
+                }
                 Text(
-                    text = "${track.artist} • ${track.album ?: "Single"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    color = TextSecondary.copy(alpha = 0.70f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -470,17 +544,95 @@ private fun PlaylistTrackItem(
                 )
             }
 
-            // Remove button
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = "Remove from playlist",
-                    tint = TextMuted,
-                    modifier = Modifier.size(18.dp)
-                )
+            // Three dots overflow menu
+            var showMenu by remember { mutableStateOf(false) }
+
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "Song options",
+                        tint = TextSecondary.copy(alpha = 0.75f),
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier
+                        .background(Color(0xFF181820))
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Queue",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToQueue()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Playlist",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                contentDescription = null,
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToPlaylist()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Remove from Playlist",
+                                color = FuelXColors.Error,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteOutline,
+                                contentDescription = null,
+                                tint = FuelXColors.Error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onRemove()
+                        }
+                    )
+                }
             }
         }
     }

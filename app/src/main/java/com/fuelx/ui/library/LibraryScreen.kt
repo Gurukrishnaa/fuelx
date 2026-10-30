@@ -1,9 +1,14 @@
 package com.fuelx.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -22,7 +27,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +39,7 @@ import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
+import com.fuelx.util.cleanArtistString
 
 enum class LibraryTab {
     PLAYLISTS,
@@ -171,7 +180,6 @@ fun LibraryScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
         // Top Header
@@ -193,12 +201,15 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "Your Library",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.8).sp
+                ),
                 color = AccentPrimary
             )
         }
 
-        // Tab Selection Chips (horizontally scrollable, prevents squishing and height blowout)
+        // Tab Selection Chips (liquid frosted glass pills, horizontally scrollable)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -207,128 +218,32 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilterChip(
+            FrostedLibraryTabChip(
                 selected = selectedTab == LibraryTab.PLAYLISTS,
-                onClick = { selectedTab = LibraryTab.PLAYLISTS },
-                label = {
-                    Text(
-                        text = "Playlists (${playlists.size})",
-                        fontWeight = if (selectedTab == LibraryTab.PLAYLISTS) FontWeight.Bold else FontWeight.Normal
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = if (selectedTab == LibraryTab.PLAYLISTS) AccentPrimary else TextSecondary
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AccentPrimary.copy(alpha = 0.18f),
-                    selectedLabelColor = AccentPrimary,
-                    containerColor = DarkSurface,
-                    labelColor = TextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedTab == LibraryTab.PLAYLISTS,
-                    borderColor = if (selectedTab == LibraryTab.PLAYLISTS) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
-                ),
-                shape = RoundedCornerShape(20.dp)
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                label = "Playlists (${playlists.size})",
+                onClick = { selectedTab = LibraryTab.PLAYLISTS }
             )
 
-            FilterChip(
+            FrostedLibraryTabChip(
                 selected = selectedTab == LibraryTab.FAVORITES,
-                onClick = { selectedTab = LibraryTab.FAVORITES },
-                label = {
-                    Text(
-                        text = "Favorites (${favorites.size})",
-                        fontWeight = if (selectedTab == LibraryTab.FAVORITES) FontWeight.Bold else FontWeight.Normal
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Favorite,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = if (selectedTab == LibraryTab.FAVORITES) AccentPrimary else TextSecondary
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AccentPrimary.copy(alpha = 0.18f),
-                    selectedLabelColor = AccentPrimary,
-                    containerColor = DarkSurface,
-                    labelColor = TextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedTab == LibraryTab.FAVORITES,
-                    borderColor = if (selectedTab == LibraryTab.FAVORITES) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
-                ),
-                shape = RoundedCornerShape(20.dp)
+                icon = Icons.Rounded.Favorite,
+                label = "Favorites (${favorites.size})",
+                onClick = { selectedTab = LibraryTab.FAVORITES }
             )
 
-            FilterChip(
+            FrostedLibraryTabChip(
                 selected = selectedTab == LibraryTab.DOWNLOADS,
-                onClick = { selectedTab = LibraryTab.DOWNLOADS },
-                label = {
-                    Text(
-                        text = "Downloads (${downloads.size})",
-                        fontWeight = if (selectedTab == LibraryTab.DOWNLOADS) FontWeight.Bold else FontWeight.Normal
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.DownloadDone,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = if (selectedTab == LibraryTab.DOWNLOADS) AccentPrimary else TextSecondary
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AccentPrimary.copy(alpha = 0.18f),
-                    selectedLabelColor = AccentPrimary,
-                    containerColor = DarkSurface,
-                    labelColor = TextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedTab == LibraryTab.DOWNLOADS,
-                    borderColor = if (selectedTab == LibraryTab.DOWNLOADS) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
-                ),
-                shape = RoundedCornerShape(20.dp)
+                icon = Icons.Rounded.DownloadDone,
+                label = "Downloads (${downloads.size})",
+                onClick = { selectedTab = LibraryTab.DOWNLOADS }
             )
 
-            FilterChip(
+            FrostedLibraryTabChip(
                 selected = selectedTab == LibraryTab.HISTORY,
-                onClick = { selectedTab = LibraryTab.HISTORY },
-                label = {
-                    Text(
-                        text = "History (${history.size})",
-                        fontWeight = if (selectedTab == LibraryTab.HISTORY) FontWeight.Bold else FontWeight.Normal
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = if (selectedTab == LibraryTab.HISTORY) AccentPrimary else TextSecondary
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = AccentPrimary.copy(alpha = 0.18f),
-                    selectedLabelColor = AccentPrimary,
-                    containerColor = DarkSurface,
-                    labelColor = TextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedTab == LibraryTab.HISTORY,
-                    borderColor = if (selectedTab == LibraryTab.HISTORY) AccentPrimary.copy(alpha = 0.5f) else Color.Transparent
-                ),
-                shape = RoundedCornerShape(20.dp)
+                icon = Icons.Rounded.History,
+                label = "History (${history.size})",
+                onClick = { selectedTab = LibraryTab.HISTORY }
             )
         }
 
@@ -450,17 +365,22 @@ fun LibraryScreen(
                                             val shuffled = favorites.shuffled()
                                             onTrackSelect(shuffled.first(), shuffled)
                                         },
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = Color(0xFF14141C).copy(alpha = 0.65f),
+                                            contentColor = TextPrimary
+                                        ),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                                         shape = RoundedCornerShape(20.dp),
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                     ) {
                                         Icon(
                                             Icons.Rounded.Shuffle,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
+                                            modifier = Modifier.size(16.dp),
+                                            tint = TextPrimary
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Shuffle")
+                                        Text("Shuffle", fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -527,17 +447,22 @@ fun LibraryScreen(
                                             val shuffled = downloads.shuffled()
                                             onTrackSelect(shuffled.first(), shuffled)
                                         },
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = Color(0xFF14141C).copy(alpha = 0.65f),
+                                            contentColor = TextPrimary
+                                        ),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
                                         shape = RoundedCornerShape(20.dp),
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                     ) {
                                         Icon(
                                             Icons.Rounded.Shuffle,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
+                                            modifier = Modifier.size(16.dp),
+                                            tint = TextPrimary
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Shuffle")
+                                        Text("Shuffle", fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -720,31 +645,58 @@ private fun LibraryTrackItem(
     onDelete: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    Card(
+    val cleanArtist = remember(track.artist) {
+        cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
+    }
+    val itemShape = RoundedCornerShape(16.dp)
+    val itemBg = if (isCurrent) {
+        Brush.horizontalGradient(
+            listOf(
+                AccentPrimary.copy(alpha = 0.16f),
+                Color(0xFF16161E).copy(alpha = 0.75f)
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            listOf(
+                Color(0xFF131318).copy(alpha = 0.65f),
+                Color(0xFF0F0F13).copy(alpha = 0.75f)
+            )
+        )
+    }
+    val itemBorder = if (isCurrent) {
+        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+    } else {
+        BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) DarkSurfaceVariant else DarkSurface
-        )
+            .clip(itemShape)
+            .background(itemBg)
+            .border(itemBorder, itemShape)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Album artwork
             Box(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 TrackArtwork(
                     artworkUrl = track.displayArtwork,
                     contentDescription = "${track.title} artwork",
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     placeholderColor = if (isCurrent) AccentPrimary.copy(alpha = 0.2f) else DarkSurfaceVariant,
                     placeholderText = "♪"
                 )
@@ -752,8 +704,7 @@ private fun LibraryTrackItem(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(DarkBackground.copy(alpha = 0.65f)),
+                            .background(Color.Black.copy(alpha = 0.60f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -773,7 +724,9 @@ private fun LibraryTrackItem(
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        letterSpacing = (-0.2).sp
                     ),
                     color = if (isCurrent) AccentPrimary else TextPrimary,
                     maxLines = 1,
@@ -786,14 +739,17 @@ private fun LibraryTrackItem(
                             imageVector = Icons.Rounded.DownloadDone,
                             contentDescription = "Downloaded",
                             tint = AccentPrimary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
                     Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        text = cleanArtist,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        color = TextSecondary.copy(alpha = 0.70f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -806,37 +762,52 @@ private fun LibraryTrackItem(
                     text = dur,
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMuted,
-                    modifier = Modifier.padding(horizontal = 6.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
 
-            // 3-dots Overflow Menu with Favorite, Queue, and Playlist options
+            // Quick favorite button
+            IconButton(
+                onClick = onToggleFav,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (isFav) "Remove favorite" else "Favorite",
+                    tint = if (isFav) AccentPrimary else TextSecondary.copy(alpha = 0.50f),
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+
+            // 3-dots Overflow Menu with Queue, Playlist, Delete options
             var showMenu by remember { mutableStateOf(false) }
 
             Box {
                 IconButton(
                     onClick = { showMenu = true },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(34.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.MoreVert,
                         contentDescription = "Song options",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
+                        tint = TextSecondary.copy(alpha = 0.70f),
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(DarkSurfaceVariant)
+                    modifier = Modifier
+                        .background(Color(0xFF181820))
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
                 ) {
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = if (isFav) "Remove Favorite" else "Favorite",
+                                text = if (isFav) "Remove Favorite" else "Add to Favorites",
                                 color = if (isFav) AccentPrimary else TextPrimary,
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                             )
                         },
                         leadingIcon = {
@@ -844,7 +815,7 @@ private fun LibraryTrackItem(
                                 imageVector = if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                                 contentDescription = null,
                                 tint = if (isFav) AccentPrimary else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         },
                         onClick = {
@@ -859,7 +830,7 @@ private fun LibraryTrackItem(
                                 Text(
                                     text = "Add to Queue",
                                     color = TextPrimary,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                                 )
                             },
                             leadingIcon = {
@@ -867,7 +838,7 @@ private fun LibraryTrackItem(
                                     imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                                     contentDescription = null,
                                     tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             },
                             onClick = {
@@ -883,7 +854,7 @@ private fun LibraryTrackItem(
                                 Text(
                                     text = "Add to Playlist",
                                     color = TextPrimary,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                                 )
                             },
                             leadingIcon = {
@@ -891,7 +862,7 @@ private fun LibraryTrackItem(
                                     imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
                                     contentDescription = null,
                                     tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             },
                             onClick = {
@@ -907,7 +878,7 @@ private fun LibraryTrackItem(
                                 Text(
                                     text = "Delete Download",
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                                 )
                             },
                             leadingIcon = {
@@ -915,7 +886,7 @@ private fun LibraryTrackItem(
                                     imageVector = Icons.Rounded.DeleteOutline,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             },
                             onClick = {
@@ -937,12 +908,30 @@ private fun PlaylistCardItem(
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    val cardShape = RoundedCornerShape(18.dp)
+    val cardBg = Brush.horizontalGradient(
+        listOf(
+            Color(0xFF161620).copy(alpha = 0.80f),
+            Color(0xFF101015).copy(alpha = 0.85f)
+        )
+    )
+    val cardBorder = BorderStroke(
+        1.dp,
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.12f),
+                Color.White.copy(alpha = 0.03f)
+            )
+        )
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            .clip(cardShape)
+            .background(cardBg)
+            .border(cardBorder, cardShape)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -954,10 +943,11 @@ private fun PlaylistCardItem(
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(12.dp))
                     .background(
-                        androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(AccentPrimary.copy(alpha = 0.35f), DarkSurfaceVariant)
+                        Brush.linearGradient(
+                            listOf(AccentPrimary.copy(alpha = 0.35f), Color(0xFF14141E))
                         )
                     ),
                 contentAlignment = Alignment.Center
@@ -967,7 +957,7 @@ private fun PlaylistCardItem(
                         artworkUrl = playlist.coverArtwork,
                         contentDescription = playlist.name,
                         modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         placeholderColor = Color.Transparent,
                         placeholderText = ""
                     )
@@ -987,7 +977,10 @@ private fun PlaylistCardItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = playlist.name,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.2).sp
+                    ),
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -995,8 +988,11 @@ private fun PlaylistCardItem(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = TextSecondary.copy(alpha = 0.70f)
                 )
             }
 
@@ -1005,6 +1001,7 @@ private fun PlaylistCardItem(
                 onClick = onPlay,
                 modifier = Modifier
                     .size(40.dp)
+                    .shadow(8.dp, CircleShape, spotColor = AccentPrimary.copy(alpha = 0.35f))
                     .clip(CircleShape)
                     .background(AccentPrimary)
             ) {
@@ -1026,7 +1023,7 @@ private fun PlaylistCardItem(
                 Icon(
                     imageVector = Icons.Rounded.DeleteOutline,
                     contentDescription = "Delete ${playlist.name}",
-                    tint = TextMuted,
+                    tint = TextSecondary.copy(alpha = 0.50f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1054,35 +1051,96 @@ private fun EmptyLibraryView(
             Box(
                 modifier = Modifier
                     .size(80.dp)
+                    .shadow(12.dp, CircleShape, spotColor = AccentPrimary.copy(alpha = 0.20f))
                     .clip(CircleShape)
-                    .background(DarkSurface),
+                    .background(Color(0xFF14141B).copy(alpha = 0.85f))
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = AccentPrimary.copy(alpha = 0.6f),
+                    tint = AccentPrimary.copy(alpha = 0.80f),
                     modifier = Modifier.size(38.dp)
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.3).sp
+                ),
+                color = TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                ),
+                color = TextSecondary.copy(alpha = 0.70f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             if (actionButton != null) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 actionButton()
             }
+        }
+    }
+}
+
+/**
+ * Frosted Glass Filter Chip for Library tab selector pills.
+ */
+@Composable
+private fun FrostedLibraryTabChip(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val animatedBg by animateColorAsState(
+        targetValue = if (selected) AccentPrimary.copy(alpha = 0.18f) else Color(0xFF14141A).copy(alpha = 0.70f),
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "chipBg"
+    )
+    val animatedBorderColor by animateColorAsState(
+        targetValue = if (selected) AccentPrimary.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f),
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "chipBorder"
+    )
+    val animatedContentColor by animateColorAsState(
+        targetValue = if (selected) AccentPrimary else TextSecondary,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "chipContent"
+    )
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(animatedBg)
+            .border(BorderStroke(1.dp, animatedBorderColor), RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = animatedContentColor
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 13.sp
+                ),
+                color = animatedContentColor
+            )
         }
     }
 }

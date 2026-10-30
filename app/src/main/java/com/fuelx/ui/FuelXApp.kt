@@ -3,9 +3,14 @@ package com.fuelx.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Home
@@ -360,7 +365,19 @@ fun FuelXApp() {
                                         snackbarHostState.showSnackbar("Playlist renamed", duration = SnackbarDuration.Short)
                                     }
                                 },
-                                onBackClick = { selectedPlaylistId = null }
+                                onBackClick = { selectedPlaylistId = null },
+                                onAddToQueue = { track ->
+                                    playerController.addToQueue(track)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Added \"${track.title}\" to queue",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                },
+                                onAddToPlaylist = { track ->
+                                    trackForPlaylistDialog = track
+                                }
                             )
                         } else {
                             LibraryScreen(
@@ -565,25 +582,60 @@ private fun FuelXNavItem(
     modifier: Modifier = Modifier
 ) {
     val accent = LocalAccent.current
-    Column(
+
+    val animatedBg by animateColorAsState(
+        targetValue = if (isSelected) accent.copy(alpha = 0.18f) else Color.Transparent,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "navItemBg"
+    )
+    val animatedBorderColor by animateColorAsState(
+        targetValue = if (isSelected) accent.copy(alpha = 0.50f) else Color.Transparent,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "navItemBorder"
+    )
+    val animatedIconColor by animateColorAsState(
+        targetValue = if (isSelected) accent else FuelXColors.TextTertiary.copy(alpha = 0.60f),
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "navItemIcon"
+    )
+
+    val navPillShape = RoundedCornerShape(22.dp)
+
+    Box(
         modifier = modifier
             .pressableScale(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .shadow(
+                elevation = if (isSelected) 8.dp else 0.dp,
+                shape = navPillShape,
+                ambientColor = Color.Transparent,
+                spotColor = if (isSelected) accent.copy(alpha = 0.35f) else Color.Transparent
+            )
+            .clip(navPillShape)
+            .background(animatedBg)
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (isSelected) {
+                        Brush.verticalGradient(
+                            listOf(
+                                animatedBorderColor,
+                                Color.White.copy(alpha = 0.12f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
+                    }
+                ),
+                navPillShape
+            )
+            .padding(horizontal = 20.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = imageVector,
             contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
-            tint = if (isSelected) FuelXColors.TextPrimary else FuelXColors.TextTertiary
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(if (isSelected) accent else Color.Transparent)
+            modifier = Modifier.size(23.dp),
+            tint = animatedIconColor
         )
     }
 }

@@ -1,10 +1,13 @@
 package com.fuelx.ui.search
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -13,6 +16,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -22,13 +26,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.fuelx.data.MusicRepository
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
+import com.fuelx.util.cleanArtistString
 import kotlinx.coroutines.delay
 
 import androidx.compose.foundation.text.KeyboardActions
@@ -89,7 +98,6 @@ fun SearchScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Row(
@@ -108,22 +116,43 @@ fun SearchScreen(
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "Search",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.8).sp
+                ),
                 color = AccentPrimary
             )
         }
 
-        // Search Bar Input
+        // Liquid Glass Search Bar Input
+        val searchBarShape = RoundedCornerShape(18.dp)
+        val searchBarBorder = Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.18f),
+                Color.White.copy(alpha = 0.05f)
+            )
+        )
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search songs, artists, albums...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(6.dp, searchBarShape, spotColor = AccentPrimary.copy(alpha = 0.15f))
+                .border(BorderStroke(1.dp, searchBarBorder), searchBarShape),
+            placeholder = {
+                Text(
+                    "Search songs, artists, albums...",
+                    color = TextSecondary.copy(alpha = 0.65f),
+                    fontSize = 14.sp
+                )
+            },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Rounded.Search,
                     contentDescription = "Search",
-                    tint = TextSecondary
+                    tint = AccentPrimary,
+                    modifier = Modifier.size(20.dp)
                 )
             },
             trailingIcon = {
@@ -132,7 +161,8 @@ fun SearchScreen(
                         Icon(
                             imageVector = Icons.Rounded.Clear,
                             contentDescription = "Clear",
-                            tint = TextSecondary
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -143,14 +173,15 @@ fun SearchScreen(
                 keyboardController?.hide()
                 focusManager.clearFocus()
             }),
-            shape = RoundedCornerShape(14.dp),
+            shape = searchBarShape,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = DarkSurface,
-                unfocusedContainerColor = DarkSurface,
-                focusedBorderColor = AccentPrimary,
-                unfocusedBorderColor = DarkBorder,
+                focusedContainerColor = Color(0xFF14141B).copy(alpha = 0.85f),
+                unfocusedContainerColor = Color(0xFF121217).copy(alpha = 0.75f),
+                focusedBorderColor = AccentPrimary.copy(alpha = 0.60f),
+                unfocusedBorderColor = Color.Transparent,
                 focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary
+                unfocusedTextColor = TextPrimary,
+                cursorColor = AccentPrimary
             )
         )
 
@@ -166,7 +197,7 @@ fun SearchScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = AccentPrimary, strokeWidth = 3.dp)
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
                             text = if (searchQuery.isBlank()) "Loading catalog..." else "Searching for \"$searchQuery\"...",
                             style = MaterialTheme.typography.bodyMedium,
@@ -183,30 +214,40 @@ fun SearchScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
+                    Box(
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFF141418).copy(alpha = 0.85f))
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(22.dp))
+                            .padding(26.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.WarningAmber,
-                            contentDescription = "Error",
-                            tint = AccentSecondary,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = errorMessage ?: "Unknown error",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { retryTrigger++ },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
-                        ) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Retry")
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Rounded.WarningAmber,
+                                contentDescription = "Error",
+                                tint = AccentSecondary,
+                                modifier = Modifier.size(46.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = errorMessage ?: "Unknown error",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Button(
+                                onClick = { retryTrigger++ },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentPrimary,
+                                    contentColor = FuelXColors.OnAccent
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Retry", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -230,38 +271,86 @@ fun SearchScreen(
             else -> {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 90.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(searchResults) { track ->
                         val isCurrent = track.id == currentTrack?.id
-                        Card(
+                        val cleanArtist = remember(track.artist) {
+                            cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
+                        }
+                        val itemShape = RoundedCornerShape(16.dp)
+                        val itemBg = if (isCurrent) {
+                            Brush.horizontalGradient(
+                                listOf(
+                                    AccentPrimary.copy(alpha = 0.16f),
+                                    Color(0xFF16161E).copy(alpha = 0.75f)
+                                )
+                            )
+                        } else {
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF131318).copy(alpha = 0.65f),
+                                    Color(0xFF0F0F13).copy(alpha = 0.75f)
+                                )
+                            )
+                        }
+                        val itemBorder = if (isCurrent) {
+                            BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+                        } else {
+                            BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                        }
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(itemShape)
+                                .background(itemBg)
+                                .border(itemBorder, itemShape)
                                 .clickable {
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
                                     onTrackSelect(track, searchResults)
-                                },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isCurrent) DarkSurfaceVariant else DarkSurface
-                            )
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                TrackArtwork(
-                                    artworkUrl = track.displayArtwork,
-                                    contentDescription = "${track.title} artwork",
-                                    modifier = Modifier.size(42.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    placeholderColor = AccentPrimary.copy(alpha = 0.2f),
-                                    placeholderText = "♪"
-                                )
+                                // Thumbnail with live equalizer
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    TrackArtwork(
+                                        artworkUrl = track.displayArtwork,
+                                        contentDescription = "${track.title} artwork",
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        placeholderColor = DarkSurfaceVariant,
+                                        placeholderText = "♪"
+                                    )
+                                    if (isCurrent) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.60f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.GraphicEq,
+                                                contentDescription = "Playing",
+                                                tint = AccentPrimary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                }
 
                                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -269,15 +358,22 @@ fun SearchScreen(
                                     Text(
                                         text = track.title,
                                         style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isCurrent) AccentPrimary else TextPrimary
+                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            letterSpacing = (-0.2).sp
                                         ),
+                                        color = if (isCurrent) AccentPrimary else TextPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = track.artist,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        text = cleanArtist,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Normal
+                                        ),
+                                        color = TextSecondary.copy(alpha = 0.70f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -293,62 +389,56 @@ fun SearchScreen(
                                 }
 
                                 val fav = isFavorite(track.id)
+
+                                // Quick Favorite button
+                                IconButton(
+                                    onClick = { onToggleFavorite(track) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                        contentDescription = if (fav) "Remove favorite" else "Favorite",
+                                        tint = if (fav) AccentPrimary else TextSecondary.copy(alpha = 0.50f),
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+
                                 var showMenu by remember { mutableStateOf(false) }
 
                                 Box {
                                     IconButton(
                                         onClick = { showMenu = true },
-                                        modifier = Modifier.size(36.dp)
+                                        modifier = Modifier.size(34.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Rounded.MoreVert,
                                             contentDescription = "Song options",
-                                            tint = TextSecondary,
-                                            modifier = Modifier.size(20.dp)
+                                            tint = TextSecondary.copy(alpha = 0.70f),
+                                            modifier = Modifier.size(19.dp)
                                         )
                                     }
 
                                     DropdownMenu(
                                         expanded = showMenu,
                                         onDismissRequest = { showMenu = false },
-                                        modifier = Modifier.background(DarkSurfaceVariant)
+                                        modifier = Modifier
+                                            .background(Color(0xFF181820))
+                                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
                                     ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = if (fav) "Remove Favorite" else "Favorite",
-                                                    color = if (fav) AccentPrimary else TextPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                                    contentDescription = null,
-                                                    tint = if (fav) AccentPrimary else TextSecondary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            },
-                                            onClick = {
-                                                showMenu = false
-                                                onToggleFavorite(track)
-                                            }
-                                        )
-
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
                                                     text = "Add to Queue",
                                                     color = TextPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                                                 )
                                             },
                                             leadingIcon = {
                                                 Icon(
                                                     imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                                                     contentDescription = null,
-                                                    tint = TextSecondary,
-                                                    modifier = Modifier.size(20.dp)
+                                                    tint = AccentPrimary,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             },
                                             onClick = {
@@ -362,15 +452,15 @@ fun SearchScreen(
                                                 Text(
                                                     text = "Add to Playlist",
                                                     color = TextPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
                                                 )
                                             },
                                             leadingIcon = {
                                                 Icon(
                                                     imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
                                                     contentDescription = null,
-                                                    tint = TextSecondary,
-                                                    modifier = Modifier.size(20.dp)
+                                                    tint = AccentPrimary,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             },
                                             onClick = {
