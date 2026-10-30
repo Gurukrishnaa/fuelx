@@ -507,12 +507,7 @@ fun FuelXApp() {
                 onClearQueue = { playerController.clearQueue() },
                 onPlayFromQueue = { index -> playerController.playFromQueue(index) },
                 onDownloadClick = {
-                    currentTrack?.let { trk ->
-                        downloadManager.downloadTrack(trk)
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Downloading \"${trk.title}\"...", duration = SnackbarDuration.Short)
-                        }
-                    }
+                    currentTrack?.let { downloadManager.downloadTrack(it) }
                 },
                 onDeleteDownload = {
                     currentTrack?.let { downloadManager.deleteDownload(it.id) }

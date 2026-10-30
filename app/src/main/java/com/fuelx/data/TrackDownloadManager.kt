@@ -35,11 +35,9 @@ class TrackDownloadManager(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
-        .followSslRedirects(true)
-        .retryOnConnectionFailure(true)
         .build()
 
     private val downloadsDir = File(context.filesDir, "downloads").apply {
@@ -125,13 +123,12 @@ class TrackDownloadManager(
         _downloadStates.value = _downloadStates.value + (track.id to DownloadState.Downloading(0f))
 
         val job = scope.launch {
-            if (!downloadsDir.exists()) downloadsDir.mkdirs()
             val tempAudio = File(downloadsDir, "${track.id}.tmp")
             val targetArt = File(downloadsDir, "${track.id}.jpg")
 
             try {
-                // 1. Resolve Audio Stream URL with forceRefresh to avoid expired stream URLs
-                val streamResult = musicRepository.resolveStream(track.id, forceRefresh = true)
+                // 1. Resolve Audio Stream URL
+                val streamResult = musicRepository.resolveStream(track.id)
                 if (streamResult.isFailure) {
                     val err = streamResult.exceptionOrNull()?.message ?: "Failed to resolve audio stream"
                     _downloadStates.value = _downloadStates.value + (track.id to DownloadState.Failed(err))
@@ -148,8 +145,7 @@ class TrackDownloadManager(
                 // 2. Download Audio Stream Chunks
                 val audioRequest = Request.Builder()
                     .url(streamUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .header("Accept", "*/*")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
 
                 httpClient.newCall(audioRequest).execute().use { response ->
