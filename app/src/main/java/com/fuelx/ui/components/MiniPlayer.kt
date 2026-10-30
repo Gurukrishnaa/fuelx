@@ -15,8 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,17 +27,21 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.model.Track
 import com.fuelx.ui.theme.*
 import com.fuelx.util.cleanArtistString
+import kotlin.math.roundToInt
 
 /**
- * Modern Liquid-Glass MiniPlayer with smooth transitions, interactive thumb seeker,
- * Previous & Next transport controls, and dynamic artwork ambient glow.
+ * Modern Liquid-Glass MiniPlayer with smooth spring animations,
+ * swipe gestures for Next/Previous tracks, sleek progress line (without dot),
+ * and dynamic artwork ambient glow.
  */
 @Composable
 fun MiniPlayer(
@@ -53,32 +55,24 @@ fun MiniPlayer(
     onPlayPauseClick: () -> Unit,
     onRetryPlayback: () -> Unit = onPlayPauseClick,
     onPreviousClick: () -> Unit = {},
-    onNextClick: () -> Unit,
+    onNextClick: () -> Unit = {},
     onSeekTo: (Long) -> Unit = {},
     onMiniPlayerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isScrubbing by remember { mutableStateOf(false) }
-    var scrubFraction by remember { mutableFloatStateOf(0f) }
-
     val effectiveDuration = remember(durationMs, currentTrack.durationMs) {
         if (durationMs > 0L) durationMs else (currentTrack.durationMs ?: 0L)
     }
 
-    // Active timestamp calculation
-    val currentMs = if (isScrubbing && effectiveDuration > 0L) {
-        (scrubFraction * effectiveDuration).toLong().coerceIn(0L, effectiveDuration)
-    } else {
-        currentPositionMs.coerceIn(0L, if (effectiveDuration > 0L) effectiveDuration else Long.MAX_VALUE)
-    }
+    val currentMs = currentPositionMs.coerceIn(0L, if (effectiveDuration > 0L) effectiveDuration else Long.MAX_VALUE)
 
     val rawProgress = if (effectiveDuration > 0L) {
         (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     val animatedProgress by animateFloatAsState(
-        targetValue = if (isScrubbing) scrubFraction else rawProgress,
-        animationSpec = if (isScrubbing) snap() else spring(stiffness = Spring.StiffnessLow),
+        targetValue = rawProgress,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "miniPlayerProgress"
     )
 
@@ -131,6 +125,17 @@ fun MiniPlayer(
 
     val pillShape = RoundedCornerShape(20.dp)
 
+    // Horizontal swipe gesture state: Swipe Right -> Next, Swipe Left -> Prev
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var totalDragX by remember { mutableFloatStateOf(0f) }
+    val animatedDragOffset by animateFloatAsState(
+        targetValue = dragOffsetX,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "miniPlayerDragOffset"
+    )
+    val density = LocalDensity.current
+    val swipeThresholdPx = with(density) { 24.dp.toPx() }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -146,6 +151,34 @@ fun MiniPlayer(
                 BorderStroke(1.dp, glassBorderBrush),
                 shape = pillShape
             )
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        totalDragX = 0f
+                        dragOffsetX = 0f
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        totalDragX += dragAmount
+                        dragOffsetX = totalDragX.coerceIn(-120f, 120f)
+                    },
+                    onDragEnd = {
+                        if (totalDragX > swipeThresholdPx) {
+                            // Swiped right -> Next song
+                            onNextClick()
+                        } else if (totalDragX < -swipeThresholdPx) {
+                            // Swiped left -> Previous song
+                            onPreviousClick()
+                        }
+                        dragOffsetX = 0f
+                        totalDragX = 0f
+                    },
+                    onDragCancel = {
+                        dragOffsetX = 0f
+                        totalDragX = 0f
+                    }
+                )
+            }
             .clickable(onClick = onMiniPlayerClick)
     ) {
         // Frosted glass base (diffuses and conceals underlying text while keeping translucent depth)
@@ -180,15 +213,17 @@ fun MiniPlayer(
                 .matchParentSize()
                 .background(frostedSheenBrush)
         )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 4.dp)
+                .offset { IntOffset(animatedDragOffset.roundToInt(), 0) }
+                .padding(top = 7.dp, bottom = 9.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 10.dp),
+                    .padding(start = 10.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Album art with smooth rounded corner
@@ -277,180 +312,83 @@ fun MiniPlayer(
                                 text = " • $timeString",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 11.5.sp,
-                                    fontWeight = if (isScrubbing) FontWeight.Bold else FontWeight.Medium,
+                                    fontWeight = FontWeight.Medium,
                                     fontFeatureSettings = "tnum"
                                 ),
-                                color = if (isScrubbing) accentColor else Color.White.copy(alpha = 0.50f),
+                                color = Color.White.copy(alpha = 0.50f),
                                 maxLines = 1
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                // Transport Controls: [Previous] [Play/Pause] [Next]
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                // Play / Pause / Buffering / Retry button (placed inwards to the left)
+                IconButton(
+                    onClick = if (playbackError != null) onRetryPlayback else onPlayPauseClick,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .scale(playPauseScale)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.12f))
                 ) {
-                    // Previous song button
-                    IconButton(
-                        onClick = onPreviousClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
+                    if (playbackError != null) {
                         Icon(
-                            imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "Previous Track",
-                            tint = Color.White.copy(alpha = 0.80f),
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = "Retry Playback",
+                            tint = FuelXColors.Error,
                             modifier = Modifier.size(20.dp)
                         )
-                    }
-
-                    // Play / Pause / Buffering / Retry button
-                    IconButton(
-                        onClick = if (playbackError != null) onRetryPlayback else onPlayPauseClick,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .scale(playPauseScale)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.10f))
-                    ) {
-                        if (playbackError != null) {
+                    } else if (isBuffering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = accentColor
+                        )
+                    } else {
+                        AnimatedContent(
+                            targetState = isPlaying,
+                            transitionSpec = {
+                                (fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.8f))
+                                    .togetherWith(fadeOut(animationSpec = tween(120)) + scaleOut(targetScale = 0.8f))
+                            },
+                            label = "playPauseIcon"
+                        ) { playing ->
                             Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = "Retry Playback",
-                                tint = FuelXColors.Error,
-                                modifier = Modifier.size(20.dp)
+                                imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (playing) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
                             )
-                        } else if (isBuffering) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = accentColor
-                            )
-                        } else {
-                            AnimatedContent(
-                                targetState = isPlaying,
-                                transitionSpec = {
-                                    (fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.8f))
-                                        .togetherWith(fadeOut(animationSpec = tween(120)) + scaleOut(targetScale = 0.8f))
-                                },
-                                label = "playPauseIcon"
-                            ) { playing ->
-                                Icon(
-                                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = if (playing) "Pause" else "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
                         }
-                    }
-
-                    // Next song button
-                    IconButton(
-                        onClick = onNextClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Next Track",
-                            tint = Color.White.copy(alpha = 0.80f),
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(3.dp))
-
-            // Interactive progress bar with glowing seeker dot (thumb)
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp)
-                    .height(14.dp)
-                    .pointerInput(effectiveDuration) {
-                        detectTapGestures { offset ->
-                            if (effectiveDuration > 0L && size.width > 0) {
-                                val fraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                onSeekTo((fraction * effectiveDuration).toLong())
-                            }
-                        }
-                    }
-                    .pointerInput(effectiveDuration) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                if (effectiveDuration > 0L && size.width > 0) {
-                                    isScrubbing = true
-                                    scrubFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                }
-                            },
-                            onDragEnd = {
-                                if (isScrubbing && effectiveDuration > 0L) {
-                                    onSeekTo((scrubFraction * effectiveDuration).toLong())
-                                    isScrubbing = false
-                                }
-                            },
-                            onDragCancel = {
-                                isScrubbing = false
-                            },
-                            onHorizontalDrag = { change, _ ->
-                                change.consume()
-                                if (size.width > 0) {
-                                    scrubFraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
-                                }
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.CenterStart
-            ) {
-                val trackWidth = maxWidth
-                val progressFraction = animatedProgress.coerceIn(0f, 1f)
-
-                // Background inactive track
+        // Progress Bar Line along the very bottom edge (flush to bottom, no dot)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .height(2.5.dp)
+                .background(Color.White.copy(alpha = 0.14f))
+        ) {
+            val progressFraction = animatedProgress.coerceIn(0f, 1f)
+            if (progressFraction > 0f) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.5.dp)
-                        .clip(RoundedCornerShape(1.5.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
-                )
-
-                // Active progress line
-                if (progressFraction > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progressFraction)
-                            .height(2.5.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(accentColor.copy(alpha = 0.7f), accentColor)
-                                )
+                        .fillMaxWidth(progressFraction)
+                        .fillMaxHeight()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(accentColor.copy(alpha = 0.75f), accentColor)
                             )
-                    )
-                }
-
-                // Seeker Dot (Thumb)
-                val thumbSize by animateDpAsState(
-                    targetValue = if (isScrubbing) 12.dp else 9.dp,
-                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                    label = "seekerDotSize"
-                )
-
-                val thumbOffset = ((trackWidth - thumbSize) * progressFraction).coerceAtLeast(0.dp)
-
-                Box(
-                    modifier = Modifier
-                        .offset(x = thumbOffset)
-                        .size(thumbSize)
-                        .shadow(3.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(1.5.dp, accentColor, CircleShape)
+                        )
                 )
             }
         }
     }
 }
+
