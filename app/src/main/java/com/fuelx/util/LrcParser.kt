@@ -68,6 +68,18 @@ object LrcParser {
         // Now process each line to build LyricWord items for word-by-word karaoke
         val finalLines = mutableListOf<LyricLine>()
 
+        // Check if there is an intro gap (song intro >= 5000ms before first lyric)
+        if (sortedIntermediate.isNotEmpty() && sortedIntermediate.first().timeMs >= 5000L) {
+            val firstLineTime = sortedIntermediate.first().timeMs
+            finalLines.add(
+                LyricLine(
+                    timeMs = 0L,
+                    text = "♪",
+                    words = listOf(LyricWord("♪", 0L, firstLineTime))
+                )
+            )
+        }
+
         for (i in sortedIntermediate.indices) {
             val current = sortedIntermediate[i]
             val nextTimeMs = if (i + 1 < sortedIntermediate.size) {
@@ -76,8 +88,32 @@ object LrcParser {
                 current.timeMs + 4500L // Default duration for last line
             }
 
-            val lineDuration = (nextTimeMs - current.timeMs).coerceIn(1000L, 10000L)
-            val parsedWords = extractOrSynthesizeWords(current.text, current.timeMs, lineDuration)
+            val isGap = isMusicGap(current.text)
+            if (isGap) {
+                // Avoid inserting consecutive duplicate music gap markers
+                if (finalLines.lastOrNull()?.text != "♪") {
+                    val duration = (nextTimeMs - current.timeMs).coerceAtLeast(1000L)
+                    finalLines.add(
+                        LyricLine(
+                            timeMs = current.timeMs,
+                            text = "♪",
+                            words = listOf(LyricWord("♪", current.timeMs, current.timeMs + duration))
+                        )
+                    )
+                }
+                continue
+            }
+
+            // Normal lyric line
+            val totalSpan = nextTimeMs - current.timeMs
+            val vocalDuration = if (totalSpan >= 8000L) {
+                // Estimate vocal singing duration based on text length
+                (current.text.length * 120L).coerceIn(2500L, 6500L)
+            } else {
+                totalSpan.coerceIn(1000L, 10000L)
+            }
+
+            val parsedWords = extractOrSynthesizeWords(current.text, current.timeMs, vocalDuration)
             val cleanText = parsedWords.joinToString(" ") { it.text }
 
             finalLines.add(
@@ -87,10 +123,25 @@ object LrcParser {
                     words = parsedWords
                 )
             )
+
+            // If there's a significant music gap between this vocal ending and the next line
+            if (totalSpan >= 8000L && (i + 1 >= sortedIntermediate.size || !isMusicGap(sortedIntermediate[i + 1].text))) {
+                val gapStartMs = current.timeMs + vocalDuration
+                val gapDuration = nextTimeMs - gapStartMs
+                if (gapDuration >= 3000L) {
+                    finalLines.add(
+                        LyricLine(
+                            timeMs = gapStartMs,
+                            text = "♪",
+                            words = listOf(LyricWord("♪", gapStartMs, nextTimeMs))
+                        )
+                    )
+                }
+            }
         }
 
         val isInstrumental = finalLines.all { line ->
-            line.text.contains("instrumental", ignoreCase = true) || line.text.isBlank()
+            line.text.contains("instrumental", ignoreCase = true) || line.text.isBlank() || line.text.trim() == "♪"
         }
 
         return ParsedLyrics(
@@ -99,6 +150,20 @@ object LrcParser {
             lines = finalLines,
             plainText = null
         )
+    }
+
+    private fun isMusicGap(text: String): Boolean {
+        val trimmed = text.trim()
+        return trimmed.isEmpty() ||
+                trimmed == "♪" ||
+                trimmed == "♪ ♪ ♪" ||
+                trimmed == "♫" ||
+                trimmed.equals("[music]", ignoreCase = true) ||
+                trimmed.equals("(music)", ignoreCase = true) ||
+                trimmed.equals("[instrumental]", ignoreCase = true) ||
+                trimmed.equals("(instrumental)", ignoreCase = true) ||
+                trimmed.contains("🎵") ||
+                trimmed.contains("🎶")
     }
 
     private fun extractOrSynthesizeWords(
