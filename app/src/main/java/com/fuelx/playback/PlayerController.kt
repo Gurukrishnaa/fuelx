@@ -70,6 +70,9 @@ class PlayerController(
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     val queue: StateFlow<List<Track>> = _queue.asStateFlow()
 
+    private val _isRepeatMode = MutableStateFlow(false)
+    val isRepeatMode: StateFlow<Boolean> = _isRepeatMode.asStateFlow()
+
     var playlist: List<Track> = emptyList()
         private set
     private var autoRetryCount = 0
@@ -83,18 +86,20 @@ class PlayerController(
 
     init {
         instance = this
-        // Restore last known state from storage into UI immediately
-        val saved = preferences.getLastPlayback()
-        if (saved != null) {
-            _currentTrack.value = saved.toTrack()
-            _currentPositionMs.value = saved.positionMs
-            _durationMs.value = (saved.durationMs ?: 0L).coerceAtLeast(0L)
-        }
-
+        // Purge any disk-persisted playback state so cold launch opens completely fresh without a miniplayer
+        preferences.clearLastPlayback()
+        _currentTrack.value = null
         connectToService()
     }
 
     private fun connectToService() {
+        try {
+            val serviceIntent = android.content.Intent(context, PlaybackService::class.java)
+            context.startService(serviceIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         val sessionToken = SessionToken(
             context,
             ComponentName(context, PlaybackService::class.java)
@@ -108,11 +113,21 @@ class PlayerController(
                     controller = mediaController
                     setupPlayerListener(mediaController)
 
-                    // If player is idle and has no items, restore the saved track in paused state
-                    if (mediaController.mediaItemCount == 0 && playlist.isNotEmpty()) {
-                        preferences.getLastPlayback()?.let { saved ->
-                            restoreSavedState(saved, playlist)
-                        }
+                    // If audio is actively playing in the background service, sync UI to match
+                    val currentItem = mediaController.currentMediaItem
+                    if (currentItem != null && mediaController.isPlaying) {
+                        val matched = playlist.find { it.id == currentItem.mediaId }
+                            ?: Track(
+                                id = currentItem.mediaId,
+                                title = currentItem.mediaMetadata.title?.toString().orEmpty(),
+                                artist = currentItem.mediaMetadata.artist?.toString().orEmpty(),
+                                album = currentItem.mediaMetadata.albumTitle?.toString(),
+                                artworkUrl = currentItem.mediaMetadata.artworkUri?.toString()
+                            )
+                        _currentTrack.value = matched
+                        _currentPositionMs.value = mediaController.currentPosition.coerceAtLeast(0L)
+                        _durationMs.value = mediaController.duration.coerceAtLeast(0L)
+                        _isPlaying.value = true
                     }
                 } catch (e: Exception) {
                     _playbackError.value = "Failed to connect to audio service"
@@ -124,7 +139,12 @@ class PlayerController(
     }
 
     private fun setupPlayerListener(player: Player) {
+        player.repeatMode = if (_isRepeatMode.value) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         player.addListener(object : Player.Listener {
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                _isRepeatMode.value = (repeatMode == Player.REPEAT_MODE_ONE)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
@@ -152,7 +172,13 @@ class PlayerController(
                     _durationMs.value = dur
                 }
                 if (playbackState == Player.STATE_ENDED) {
-                    skipNext()
+                    if (_isRepeatMode.value) {
+                        seekTo(0L)
+                        player.prepare()
+                        player.play()
+                    } else {
+                        skipNext()
+                    }
                 }
             }
 
@@ -170,7 +196,6 @@ class PlayerController(
 
                 if (matched != null) {
                     _currentTrack.value = matched
-                    preferences.saveLastPlayback(matched, effectivePos)
                     scope.launch {
                         libraryRepository.recordHistory(matched)
                     }
@@ -254,44 +279,6 @@ class PlayerController(
 
     fun setPlaylist(tracks: List<Track>) {
         this.playlist = tracks
-        val current = _currentTrack.value
-        if (current == null) {
-            preferences.getLastPlayback()?.let { saved ->
-                restoreSavedState(saved, tracks)
-            }
-        }
-    }
-
-    fun restoreSavedState(saved: SavedPlaybackState, tracks: List<Track> = playlist) {
-        this.playlist = tracks
-        val matchedTrack = tracks.find { it.id == saved.trackId } ?: saved.toTrack()
-        _currentTrack.value = matchedTrack
-        _currentPositionMs.value = saved.positionMs
-        _durationMs.value = (matchedTrack.durationMs ?: 0L).coerceAtLeast(0L)
-        _isPlaying.value = false
-
-        val streamUri = matchedTrack.streamUri
-        if (!streamUri.isNullOrBlank()) {
-            val player = controller ?: return
-            val metadata = MediaMetadata.Builder()
-                .setTitle(matchedTrack.title)
-                .setArtist(matchedTrack.artist)
-                .setAlbumTitle(matchedTrack.album)
-                .setArtworkUri(if (!matchedTrack.artworkUrl.isNullOrBlank()) Uri.parse(matchedTrack.artworkUrl) else null)
-                .build()
-
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(matchedTrack.id)
-                .setUri(streamUri)
-                .setMimeType("audio/mp4")
-                .setMediaMetadata(metadata)
-                .build()
-
-            pendingResumePositionMs = saved.positionMs
-            player.setMediaItem(mediaItem, saved.positionMs)
-            player.prepare()
-            player.pause() // Stays paused at exact saved point
-        }
     }
 
     fun playTrack(
@@ -307,15 +294,7 @@ class PlayerController(
         val targetPosition = when {
             forceRestart -> 0L
             startPositionMs != null -> startPositionMs
-            isSameTrack -> {
-                val activePos = _currentPositionMs.value
-                if (activePos > 0L) {
-                    activePos
-                } else {
-                    val saved = preferences.getLastPlayback()
-                    if (saved?.trackId == track.id && saved.positionMs > 0L) saved.positionMs else 0L
-                }
-            }
+            isSameTrack -> _currentPositionMs.value.coerceAtLeast(0L)
             else -> 0L
         }
 
@@ -345,7 +324,6 @@ class PlayerController(
         _playbackError.value = null
         pendingResumePositionMs = targetPosition
 
-        preferences.saveLastPlayback(track, targetPosition)
         scope.launch {
             libraryRepository.recordHistory(track)
         }
@@ -488,7 +466,6 @@ class PlayerController(
             if (_playbackError.value != null || player.currentMediaItem == null || player.currentMediaItem?.mediaId != current?.id) {
                 if (current != null) {
                     val resumePos = _currentPositionMs.value.takeIf { it > 0L }
-                        ?: preferences.getLastPlayback()?.positionMs?.takeIf { it > 0L }
                     playTrack(current, playlist, forceRestart = false, startPositionMs = resumePos)
                 }
                 return
@@ -506,6 +483,13 @@ class PlayerController(
         player.seekTo(positionMs)
         _currentPositionMs.value = positionMs
         preferences.savePositionOnly(positionMs)
+    }
+
+    fun toggleRepeatMode(): Boolean {
+        val newMode = !_isRepeatMode.value
+        _isRepeatMode.value = newMode
+        controller?.repeatMode = if (newMode) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        return newMode
     }
 
     fun hasNext(): Boolean = _queue.value.isNotEmpty() || playlist.isNotEmpty()
@@ -644,6 +628,21 @@ class PlayerController(
                 preferences.savePositionOnly(pos)
             }
         }
+    }
+
+    fun clearState() {
+        playJob?.cancel()
+        stopPositionUpdates(saveCurrentPlayerPosition = false)
+        _currentTrack.value = null
+        _currentPositionMs.value = 0L
+        _durationMs.value = 0L
+        _isPlaying.value = false
+        _isBuffering.value = false
+        _playbackError.value = null
+        pendingResumePositionMs = null
+        controller?.stop()
+        controller?.clearMediaItems()
+        preferences.clearLastPlayback()
     }
 
     fun release() {

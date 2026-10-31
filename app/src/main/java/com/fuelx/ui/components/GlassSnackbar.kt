@@ -162,6 +162,13 @@ private fun resolveSnackbarIcon(message: String, defaultAccent: Color): Pair<Ima
                 Icons.AutoMirrored.Rounded.QueueMusic to defaultAccent
             }
         }
+        lower.contains("repeat") || lower.contains("loop") -> {
+            if (lower.contains("off")) {
+                Icons.Rounded.Repeat to Color.White.copy(alpha = 0.70f)
+            } else {
+                Icons.Rounded.Repeat to defaultAccent
+            }
+        }
         lower.contains("error") || lower.contains("fail") || lower.contains("unable") || lower.contains("couldn't") -> {
             Icons.Rounded.WarningAmber to Color(0xFFFF5252)
         }

@@ -118,6 +118,7 @@ fun FuelXApp() {
     val isBuffering by playerController.isBuffering.collectAsState()
     val playbackError by playerController.playbackError.collectAsState()
     val queue by playerController.queue.collectAsState()
+    val isRepeatMode by playerController.isRepeatMode.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
 
@@ -514,8 +515,19 @@ fun FuelXApp() {
                 playbackError = playbackError,
                 onRetryPlayback = { playerController.retryPlayback() },
                 isFavorite = favorites.any { it.id == currentTrack?.id },
+                isRepeat = isRepeatMode,
                 onToggleFavorite = {
                     currentTrack?.let { onToggleFavorite(it) }
+                },
+                onToggleRepeat = {
+                    val enabled = playerController.toggleRepeatMode()
+                    coroutineScope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(
+                            message = if (enabled) "Loop mode on" else "Loop mode off",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
                 },
                 downloadState = currentDownloadState,
                 queue = queue,

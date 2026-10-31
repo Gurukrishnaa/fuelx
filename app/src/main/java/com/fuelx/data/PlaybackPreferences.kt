@@ -30,6 +30,10 @@ class PlaybackPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("fuelx_playback_prefs", Context.MODE_PRIVATE)
 
+    init {
+        clearLastPlayback()
+    }
+
     fun saveLastPlayback(track: Track, positionMs: Long) {
         prefs.edit()
             .putString(KEY_TRACK_ID, track.id)
@@ -45,6 +49,19 @@ class PlaybackPreferences(context: Context) {
 
     fun savePositionOnly(positionMs: Long) {
         prefs.edit().putLong(KEY_POSITION_MS, positionMs).apply()
+    }
+
+    fun clearLastPlayback() {
+        prefs.edit()
+            .remove(KEY_TRACK_ID)
+            .remove(KEY_POSITION_MS)
+            .remove(KEY_TITLE)
+            .remove(KEY_ARTIST)
+            .remove(KEY_ALBUM)
+            .remove(KEY_DURATION_MS)
+            .remove(KEY_STREAM_URI)
+            .remove(KEY_ARTWORK_URL)
+            .apply()
     }
 
     fun getLastPlayback(): SavedPlaybackState? {

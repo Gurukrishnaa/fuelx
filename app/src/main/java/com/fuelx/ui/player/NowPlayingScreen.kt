@@ -61,6 +61,7 @@ fun NowPlayingScreen(
     durationMs: Long? = null,
     isBuffering: Boolean = false,
     isFavorite: Boolean = false,
+    isRepeat: Boolean = false,
     playbackError: String? = null,
     downloadState: DownloadState = DownloadState.Idle,
     queue: List<Track> = emptyList(),
@@ -68,6 +69,7 @@ fun NowPlayingScreen(
     isLyricsLoading: Boolean = false,
     lyricsError: String? = null,
     onToggleFavorite: () -> Unit = {},
+    onToggleRepeat: () -> Unit = {},
     onDownloadClick: () -> Unit = {},
     onDeleteDownload: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
@@ -84,7 +86,6 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier
 ) {
     var isShuffle by remember { mutableStateOf(false) }
-    var isRepeat by remember { mutableStateOf(false) }
     var showRemoveDownloadDialog by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
     var isLyricsExpanded by remember { mutableStateOf(false) }
@@ -604,10 +605,10 @@ fun NowPlayingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                IconButton(onClick = { isRepeat = !isRepeat }) {
+                IconButton(onClick = onToggleRepeat) {
                     Icon(
                         imageVector = Icons.Rounded.Repeat,
-                        contentDescription = "Repeat",
+                        contentDescription = "Loop Mode",
                         tint = if (isRepeat) accent else FuelXColors.TextTertiary
                     )
                 }

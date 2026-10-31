@@ -183,36 +183,111 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_NOT_STICKY
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession
     }
 
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        val player = session.player
+        if (mediaSession == null || player.playbackState == Player.STATE_IDLE || player.mediaItemCount == 0) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.cancelAll()
+            return
+        }
+        super.onUpdateNotification(session, startInForegroundRequired)
+    }
+
     // Called when the user clears/swipes the app from the recent screen
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
-        if (player != null) {
-            val currentItem = player.currentMediaItem
-            if (currentItem != null) {
-                val currentPosition = player.currentPosition
-                val track = Track(
-                    id = currentItem.mediaId,
-                    title = currentItem.mediaMetadata.title?.toString() ?: "",
-                    artist = currentItem.mediaMetadata.artist?.toString() ?: "",
-                    album = currentItem.mediaMetadata.albumTitle?.toString(),
-                    artworkUrl = currentItem.mediaMetadata.artworkUri?.toString(),
-                    durationMs = player.duration.takeIf { it > 0 },
-                    streamUri = currentItem.localConfiguration?.uri?.toString()
-                )
-                // Save the exact track and position for restoration
-                PlaybackPreferences(this).saveLastPlayback(track, currentPosition)
+        try {
+            val player = mediaSession?.player
+            if (player != null) {
+                player.pause()
+                player.stop()
+                player.clearMediaItems()
             }
-            player.pause()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        // Stop foreground service, remove notification, and kill playback state
+
+        // Dismiss the persistent notification from Android notification shade & lockscreen
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        try {
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.cancelAll()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // User explicitly cleared app from recents: purge saved playback state
+        // so on fresh launch the app opens cleanly without a stale miniplayer
+        try {
+            PlaybackPreferences(this).clearLastPlayback()
+            PlayerController.instance?.clearState()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Release MediaSession so Android Quick Settings media player tile vanishes immediately
+        try {
+            mediaSession?.run {
+                player.release()
+                release()
+                mediaSession = null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Stop foreground service completely
         stopSelf()
+
+        super.onTaskRemoved(rootIntent)
+
+        // Terminate process so Android SystemUI immediately removes the media player notification and tile
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     override fun onDestroy() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager?.cancelAll()
+
         mediaSession?.run {
             player.release()
             release()
