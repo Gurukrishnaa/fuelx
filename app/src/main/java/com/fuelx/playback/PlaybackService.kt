@@ -25,6 +25,7 @@ import com.fuelx.model.Track
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var isTaskRemoved = false
 
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "fuelx_playback_channel"
@@ -169,6 +170,9 @@ class PlaybackService : MediaSessionService() {
                     session: MediaSession,
                     controller: MediaSession.ControllerInfo
                 ): MediaSession.ConnectionResult {
+                    if (isTaskRemoved) {
+                        return MediaSession.ConnectionResult.reject()
+                    }
                     val availablePlayerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                         .add(Player.COMMAND_SEEK_TO_NEXT)
                         .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
@@ -189,12 +193,13 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        if (isTaskRemoved) return null
         return mediaSession
     }
 
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         val player = session.player
-        if (mediaSession == null || player.playbackState == Player.STATE_IDLE || player.mediaItemCount == 0) {
+        if (isTaskRemoved || mediaSession == null || player.playbackState == Player.STATE_IDLE || player.mediaItemCount == 0) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -206,6 +211,7 @@ class PlaybackService : MediaSessionService() {
                 e.printStackTrace()
             }
             val nm = getSystemService(NotificationManager::class.java)
+            nm?.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
             nm?.cancelAll()
             return
         }
@@ -214,6 +220,8 @@ class PlaybackService : MediaSessionService() {
 
     // Called when the user clears/swipes the app from the recent screen
     override fun onTaskRemoved(rootIntent: Intent?) {
+        isTaskRemoved = true
+
         try {
             val player = mediaSession?.player
             if (player != null) {
@@ -239,6 +247,7 @@ class PlaybackService : MediaSessionService() {
 
         try {
             val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
             notificationManager?.cancelAll()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -269,11 +278,15 @@ class PlaybackService : MediaSessionService() {
 
         super.onTaskRemoved(rootIntent)
 
-        // Terminate process so Android SystemUI immediately removes the media player notification and tile
-        android.os.Process.killProcess(android.os.Process.myPid())
+        // Give the OS 250ms to flush the Binder IPC notification cancellation to NotificationManagerService
+        // before terminating the process, preventing ghost notifications or frozen resumption cards
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }, 250)
     }
 
     override fun onDestroy() {
+        isTaskRemoved = true
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -286,6 +299,7 @@ class PlaybackService : MediaSessionService() {
         }
 
         val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager?.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
         notificationManager?.cancelAll()
 
         mediaSession?.run {

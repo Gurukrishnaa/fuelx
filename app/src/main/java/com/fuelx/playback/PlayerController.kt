@@ -334,6 +334,12 @@ class PlayerController(
         controller?.pause()
 
         scope.launch {
+            try {
+                val serviceIntent = android.content.Intent(context, PlaybackService::class.java)
+                context.startService(serviceIntent)
+            } catch (e: Exception) {
+                // Ignore if already started
+            }
             libraryRepository.recordHistory(track)
         }
 
