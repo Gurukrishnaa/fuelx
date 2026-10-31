@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,7 @@ import com.fuelx.ui.library.LibraryScreen
 import com.fuelx.ui.library.PlaylistDetailScreen
 import com.fuelx.ui.player.NowPlayingScreen
 import com.fuelx.ui.search.SearchScreen
+import com.fuelx.ui.splash.FuelXSplash
 import com.fuelx.ui.theme.*
 import com.fuelx.util.ArtworkAccentHelper
 import com.fuelx.util.NetworkMonitor
@@ -71,6 +73,8 @@ fun FuelXApp() {
     // Language preference states (prompts on initial fresh open if not set)
     var selectedLanguages by remember { mutableStateOf(preferences.getSelectedLanguages()) }
     var showLanguageDialog by remember { mutableStateOf(!preferences.isLanguagePreferenceSet()) }
+
+    var showSplash by rememberSaveable { mutableStateOf(true) }
 
     val favorites by libraryRepository.favorites.collectAsState()
     val downloads by libraryRepository.downloads.collectAsState()
@@ -631,6 +635,14 @@ fun FuelXApp() {
                 .zIndex(999f)
         ) { data ->
             GlassSnackbar(snackbarData = data)
+        }
+
+        // Animated Splash Screen overlay on cold start
+        if (showSplash) {
+            FuelXSplash(
+                onFinished = { showSplash = false },
+                modifier = Modifier.zIndex(1000f)
+            )
         }
     }
 }

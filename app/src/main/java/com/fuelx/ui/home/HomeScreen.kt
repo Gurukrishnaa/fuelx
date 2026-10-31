@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.MusicRepository
 import com.fuelx.model.Track
+import com.fuelx.ui.brand.FuelXLockup
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 import com.fuelx.util.cleanArtistString
@@ -271,23 +272,8 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "FuelX",
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = (-0.8).sp
-                            ),
-                            color = AccentPrimary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(AccentPrimary)
-                        )
-                    }
+                    FuelXLockup(knockout = FuelXColors.Bg)
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Your music, uninterrupted",
                         style = MaterialTheme.typography.bodyMedium.copy(
