@@ -152,9 +152,17 @@ class PlayerController(
                     _playbackError.value = null
                     startPositionUpdates()
                 } else {
-                    stopPositionUpdates()
-                    // Persist exact position on pause
-                    preferences.savePositionOnly(player.currentPosition)
+                    stopPositionUpdates(saveCurrentPlayerPosition = false)
+                    controller?.let { player ->
+                        val activeId = _currentTrack.value?.id
+                        if (activeId != null && player.currentMediaItem?.mediaId == activeId) {
+                            val pos = player.currentPosition
+                            if (pos >= 0L) {
+                                _currentPositionMs.value = pos
+                                preferences.savePositionOnly(pos)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -191,7 +199,8 @@ class PlayerController(
                 val effectivePos = when {
                     resumePos != null && resumePos > 0L -> resumePos
                     reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> 0L
-                    else -> player.currentPosition.coerceAtLeast(0L)
+                    mediaId != null && mediaId != _currentTrack.value?.id -> 0L
+                    else -> 0L
                 }
 
                 if (matched != null) {
@@ -314,15 +323,15 @@ class PlayerController(
         playJob?.cancel()
         // Immediately halt position updates without saving previous song's position
         stopPositionUpdates(saveCurrentPlayerPosition = false)
-        controller?.pause()
+        // Immediately update active track and reset progress to 0L (or targetPosition)
         _currentTrack.value = track
-        // Maintain target position so UI immediately shows the accurate progress
         _currentPositionMs.value = targetPosition
         _durationMs.value = track.durationMs ?: 0L
-
         _isBuffering.value = true
         _playbackError.value = null
         pendingResumePositionMs = targetPosition
+
+        controller?.pause()
 
         scope.launch {
             libraryRepository.recordHistory(track)
@@ -622,10 +631,15 @@ class PlayerController(
         positionJob?.cancel()
         positionJob = null
         if (saveCurrentPlayerPosition) {
-            controller?.let {
-                val pos = it.currentPosition
-                _currentPositionMs.value = pos
-                preferences.savePositionOnly(pos)
+            controller?.let { player ->
+                val activeId = _currentTrack.value?.id
+                if (activeId != null && player.currentMediaItem?.mediaId == activeId) {
+                    val pos = player.currentPosition
+                    if (pos >= 0L) {
+                        _currentPositionMs.value = pos
+                        preferences.savePositionOnly(pos)
+                    }
+                }
             }
         }
     }
