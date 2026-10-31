@@ -264,7 +264,11 @@ fun LyricsScreen(
                         contentPadding = PaddingValues(top = 24.dp, bottom = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
-                        itemsIndexed(lines) { index, line ->
+                        itemsIndexed(
+                            lines,
+                            key = { index, line -> "${line.timeMs}_$index" },
+                            contentType = { _, _ -> "lyric_line" }
+                        ) { index, line ->
                             val isActiveLine = index == activeIndex
                             val isPastLine = index < activeIndex
 

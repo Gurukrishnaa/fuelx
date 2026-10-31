@@ -370,7 +370,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 4.dp)
                     ) {
-                        items(recentlyPlayed.take(10), key = { it.id }) { track ->
+                        items(recentlyPlayed.take(10), key = { it.id }, contentType = { "recent_card" }) { track ->
                             RecentTrackCard(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
@@ -400,7 +400,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 4.dp)
                     ) {
-                        items(shelves.pickedForYou, key = { it.id }) { track ->
+                        items(shelves.pickedForYou, key = { it.id }, contentType = { "recent_card" }) { track ->
                             RecentTrackCard(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
@@ -431,7 +431,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 4.dp)
                     ) {
-                        items(becauseTracksToShow, key = { it.id }) { track ->
+                        items(becauseTracksToShow, key = { it.id }, contentType = { "recent_card" }) { track ->
                             RecentTrackCard(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
@@ -453,7 +453,11 @@ fun HomeScreen(
                 SleekSectionHeader(title, "CHARTS", Icons.Rounded.Whatshot, AccentSecondary)
                 Spacer(Modifier.height(12.dp))
             }
-            itemsIndexed(shelves.trending.take(6), key = { _, t -> t.id }) { index, track ->
+            itemsIndexed(
+                items = shelves.trending.take(6),
+                key = { _, t -> t.id },
+                contentType = { _, _ -> "track_item" }
+            ) { index, track ->
                 val isCurrent = track.id == currentTrack?.id
                 TrackListItem(
                     track = track,
@@ -526,7 +530,7 @@ fun HomeScreen(
                 }
             }
         } else {
-            items(cleanGenreTracks) { track ->
+            items(cleanGenreTracks, key = { it.id }, contentType = { "track_item" }) { track ->
                 val isCurrent = track.id == currentTrack?.id
                 TrackListItem(
                     track = track,
@@ -892,26 +896,30 @@ private fun RecentTrackCard(
     val cleanArtist = remember(track.artist) {
         cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
     }
-    val cardShape = RoundedCornerShape(18.dp)
-    val cardBg = if (isSelected) {
-        Brush.verticalGradient(
-            listOf(
-                AccentPrimary.copy(alpha = 0.15f),
-                Color(0xFF16161E).copy(alpha = 0.85f)
+    val cardShape = remember { RoundedCornerShape(18.dp) }
+    val cardBg = remember(isSelected) {
+        if (isSelected) {
+            Brush.verticalGradient(
+                listOf(
+                    AccentPrimary.copy(alpha = 0.15f),
+                    Color(0xFF16161E).copy(alpha = 0.85f)
+                )
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFF16161C).copy(alpha = 0.80f),
-                Color(0xFF0F0F14).copy(alpha = 0.90f)
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color(0xFF16161C).copy(alpha = 0.80f),
+                    Color(0xFF0F0F14).copy(alpha = 0.90f)
+                )
             )
-        )
+        }
     }
-    val borderStroke = if (isSelected) {
-        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.50f))
-    } else {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    val borderStroke = remember(isSelected) {
+        if (isSelected) {
+            BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.50f))
+        } else {
+            BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+        }
     }
 
     Box(
@@ -984,26 +992,30 @@ private fun TrackListItem(
     val cleanArtist = remember(track.artist) {
         cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
     }
-    val itemShape = RoundedCornerShape(16.dp)
-    val itemBg = if (isCurrent) {
-        Brush.horizontalGradient(
-            listOf(
-                AccentPrimary.copy(alpha = 0.16f),
-                Color(0xFF16161E).copy(alpha = 0.75f)
+    val itemShape = remember { RoundedCornerShape(16.dp) }
+    val itemBg = remember(isCurrent) {
+        if (isCurrent) {
+            Brush.horizontalGradient(
+                listOf(
+                    AccentPrimary.copy(alpha = 0.16f),
+                    Color(0xFF16161E).copy(alpha = 0.75f)
+                )
             )
-        )
-    } else {
-        Brush.horizontalGradient(
-            listOf(
-                Color(0xFF131318).copy(alpha = 0.65f),
-                Color(0xFF0F0F13).copy(alpha = 0.75f)
+        } else {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFF131318).copy(alpha = 0.65f),
+                    Color(0xFF0F0F13).copy(alpha = 0.75f)
+                )
             )
-        )
+        }
     }
-    val itemBorder = if (isCurrent) {
-        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
-    } else {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    val itemBorder = remember(isCurrent) {
+        if (isCurrent) {
+            BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+        } else {
+            BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        }
     }
 
     Box(

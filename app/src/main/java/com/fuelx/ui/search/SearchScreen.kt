@@ -443,7 +443,7 @@ fun SearchScreen(
                                 }
                             }
 
-                            items(recommendedTracks.take(7), key = { "rec_${it.id}" }) { track ->
+                            items(recommendedTracks.take(7), key = { "rec_${it.id}" }, contentType = { "track_item" }) { track ->
                                 SearchTrackItem(
                                     track = track,
                                     isCurrent = track.id == currentTrack?.id,
@@ -461,7 +461,7 @@ fun SearchScreen(
                         }
                     } else {
                         // Live Search Results
-                        items(searchResults, key = { "search_${it.id}" }) { track ->
+                        items(searchResults, key = { "search_${it.id}" }, contentType = { "track_item" }) { track ->
                             SearchTrackItem(
                                 track = track,
                                 isCurrent = track.id == currentTrack?.id,
@@ -500,26 +500,30 @@ private fun SearchTrackItem(
     val cleanArtist = remember(track.artist) {
         cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
     }
-    val itemShape = RoundedCornerShape(16.dp)
-    val itemBg = if (isCurrent) {
-        Brush.horizontalGradient(
-            listOf(
-                AccentPrimary.copy(alpha = 0.16f),
-                Color(0xFF16161E).copy(alpha = 0.75f)
+    val itemShape = remember { RoundedCornerShape(16.dp) }
+    val itemBg = remember(isCurrent) {
+        if (isCurrent) {
+            Brush.horizontalGradient(
+                listOf(
+                    AccentPrimary.copy(alpha = 0.16f),
+                    Color(0xFF16161E).copy(alpha = 0.75f)
+                )
             )
-        )
-    } else {
-        Brush.horizontalGradient(
-            listOf(
-                Color(0xFF131318).copy(alpha = 0.65f),
-                Color(0xFF0F0F13).copy(alpha = 0.75f)
+        } else {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFF131318).copy(alpha = 0.65f),
+                    Color(0xFF0F0F13).copy(alpha = 0.75f)
+                )
             )
-        )
+        }
     }
-    val itemBorder = if (isCurrent) {
-        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
-    } else {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    val itemBorder = remember(isCurrent) {
+        if (isCurrent) {
+            BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+        } else {
+            BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        }
     }
 
     Box(

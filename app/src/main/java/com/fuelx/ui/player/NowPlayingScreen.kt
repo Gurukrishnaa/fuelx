@@ -813,7 +813,11 @@ fun NowPlayingScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)
                         ) {
-                            itemsIndexed(queue) { index, queuedTrack ->
+                            itemsIndexed(
+                                queue,
+                                key = { index, queuedTrack -> "${queuedTrack.id}_$index" },
+                                contentType = { _, _ -> "queue_item" }
+                            ) { index, queuedTrack ->
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1172,7 +1176,11 @@ private fun RollingLyricsCard(
                             contentPadding = PaddingValues(top = 8.dp, bottom = 36.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            itemsIndexed(lines) { index, line ->
+                            itemsIndexed(
+                                lines,
+                                key = { index, line -> "${line.timeMs}_$index" },
+                                contentType = { _, _ -> "lyric_line" }
+                            ) { index, line ->
                                 val isActiveLine = index == activeIndex
                                 val isPastLine = index < activeIndex
 

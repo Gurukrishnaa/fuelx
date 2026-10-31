@@ -215,7 +215,11 @@ fun AddToPlaylistDialog(
                             .heightIn(max = 240.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(playlists) { playlist ->
+                        items(
+                            playlists,
+                            key = { it.id },
+                            contentType = { "playlist_picker_item" }
+                        ) { playlist ->
                             val isAlreadyIn = playlist.tracks.any { it.id == track.id }
                             Row(
                                 modifier = Modifier

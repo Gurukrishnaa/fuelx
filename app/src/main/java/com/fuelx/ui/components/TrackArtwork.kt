@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,15 +17,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.fuelx.ui.theme.AccentPrimary
 import com.fuelx.ui.theme.DarkSurfaceVariant
 
 /**
- * Reusable, cached album artwork component powered by Coil Compose.
- * Displays cross-fading remote artwork with a styled dark fallback placeholder.
+ * Reusable, high-performance cached album artwork component powered by Coil AsyncImage.
+ * Uses direct hardware composition without Subcompose overhead for 60/120fps ultra-smooth scrolling.
  */
 @Composable
 fun TrackArtwork(
@@ -39,80 +36,38 @@ fun TrackArtwork(
     placeholderIcon: ImageVector? = null,
     placeholderText: String = "♪"
 ) {
+    val context = LocalContext.current
+
     Box(
         modifier = modifier
             .clip(shape)
             .background(placeholderColor),
         contentAlignment = Alignment.Center
     ) {
+        if (placeholderIcon != null) {
+            Icon(
+                imageVector = placeholderIcon,
+                contentDescription = null,
+                tint = AccentPrimary.copy(alpha = 0.5f)
+            )
+        } else {
+            Text(
+                text = placeholderText,
+                color = AccentPrimary.copy(alpha = 0.5f),
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+
         if (!artworkUrl.isNullOrBlank()) {
-            SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
+            AsyncImage(
+                model = ImageRequest.Builder(context)
                     .data(artworkUrl)
-                    .crossfade(true)
+                    .crossfade(150)
                     .build(),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(placeholderColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (placeholderIcon != null) {
-                            Icon(
-                                imageVector = placeholderIcon,
-                                contentDescription = null,
-                                tint = AccentPrimary.copy(alpha = 0.5f)
-                            )
-                        } else {
-                            Text(
-                                text = placeholderText,
-                                color = AccentPrimary.copy(alpha = 0.5f),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                    }
-                },
-                error = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(placeholderColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (placeholderIcon != null) {
-                            Icon(
-                                imageVector = placeholderIcon,
-                                contentDescription = null,
-                                tint = AccentPrimary
-                            )
-                        } else {
-                            Text(
-                                text = placeholderText,
-                                color = AccentPrimary,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                    }
-                }
+                modifier = Modifier.fillMaxSize()
             )
-        } else {
-            if (placeholderIcon != null) {
-                Icon(
-                    imageVector = placeholderIcon,
-                    contentDescription = null,
-                    tint = AccentPrimary
-                )
-            } else {
-                Text(
-                    text = placeholderText,
-                    color = AccentPrimary,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
         }
     }
 }
