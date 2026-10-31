@@ -33,6 +33,7 @@ data class MusicLanguage(
 val AVAILABLE_LANGUAGES = listOf(
     MusicLanguage("English", "English", "Global Hits"),
     MusicLanguage("Tamil", "Tamil", "தமிழ்"),
+    MusicLanguage("Telugu", "Telugu", "తెలుగు"),
     MusicLanguage("Hindi", "Hindi", "हिंदी"),
     MusicLanguage("Malayalam", "Malayalam", "മലയാളം")
 )

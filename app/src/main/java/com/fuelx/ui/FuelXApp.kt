@@ -324,6 +324,9 @@ fun FuelXApp() {
                         SearchScreen(
                             repository = repository,
                             currentTrack = currentTrack,
+                            selectedLanguages = selectedLanguages,
+                            history = history,
+                            favorites = favorites,
                             isFavorite = { id -> favorites.any { it.id == id } },
                             onToggleFavorite = onToggleFavorite,
                             onAddToQueue = { track ->

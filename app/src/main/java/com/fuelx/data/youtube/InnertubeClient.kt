@@ -78,6 +78,7 @@ class InnertubeClient(
         for (lang in languages) {
             val query = when (lang.lowercase()) {
                 "tamil" -> "Latest Tamil Movie Hit Songs $year"
+                "telugu" -> "Latest Telugu Movie Hit Songs $year"
                 "hindi" -> "Latest Bollywood Hit Songs $year"
                 "malayalam" -> "Latest Malayalam Movie Songs $year"
                 "english" -> "Top Billboard Hit Songs $year"
@@ -114,6 +115,7 @@ class InnertubeClient(
             val query = when (genreId.lowercase()) {
                 "melody" -> when (l) {
                     "tamil" -> "Tamil Melody Hit Songs $year"
+                    "telugu" -> "Telugu Melody Hit Songs $year"
                     "hindi" -> "Bollywood Romantic Melody Songs $year"
                     "malayalam" -> "Malayalam Melody Songs $year"
                     "english" -> "Pop Acoustic Love Songs $year"
@@ -121,6 +123,7 @@ class InnertubeClient(
                 }
                 "party" -> when (l) {
                     "tamil" -> "Tamil Kuthu Party Dance Songs $year"
+                    "telugu" -> "Telugu Mass Party Dance Songs $year"
                     "hindi" -> "Bollywood Dance Party Songs $year"
                     "malayalam" -> "Malayalam Dance Party Songs $year"
                     "english" -> "Party Dance Pop Club Songs $year"
@@ -128,6 +131,7 @@ class InnertubeClient(
                 }
                 "hiphop" -> when (l) {
                     "tamil" -> "Tamil Hip Hop Rap Songs $year"
+                    "telugu" -> "Telugu Hip Hop Rap Songs $year"
                     "hindi" -> "Desi Hip Hop Hindi Rap Songs $year"
                     "malayalam" -> "Malayalam Hip Hop Songs $year"
                     "english" -> "Hip Hop Rap Hits $year"
@@ -135,6 +139,7 @@ class InnertubeClient(
                 }
                 "chill" -> when (l) {
                     "tamil" -> "Tamil Lo-Fi Acoustic Songs $year"
+                    "telugu" -> "Telugu Lo-Fi Acoustic Songs $year"
                     "hindi" -> "Hindi Lo-Fi Acoustic Songs $year"
                     "malayalam" -> "Malayalam Lo-Fi Acoustic Songs $year"
                     "english" -> "Lo-Fi Acoustic Chill Pop Songs $year"
@@ -142,6 +147,7 @@ class InnertubeClient(
                 }
                 "rock" -> when (l) {
                     "tamil" -> "Tamil Rock Fast Songs $year"
+                    "telugu" -> "Telugu Rock Fast Songs $year"
                     "hindi" -> "Hindi Rock Metal Songs $year"
                     "malayalam" -> "Malayalam Rock Songs $year"
                     "english" -> "Rock Hits Modern Songs $year"
@@ -149,6 +155,7 @@ class InnertubeClient(
                 }
                 "folk" -> when (l) {
                     "tamil" -> "Tamil Folk Gaana Songs $year"
+                    "telugu" -> "Telugu Folk Mass Songs $year"
                     "hindi" -> "Hindi Indie Folk Songs $year"
                     "malayalam" -> "Malayalam Folk Indie Songs $year"
                     "english" -> "Indie Folk Acoustic Songs $year"

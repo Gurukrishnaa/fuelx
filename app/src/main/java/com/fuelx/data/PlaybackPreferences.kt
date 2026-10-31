@@ -98,7 +98,39 @@ class PlaybackPreferences(context: Context) {
         return prefs.contains(KEY_SELECTED_LANGUAGES) && (prefs.getStringSet(KEY_SELECTED_LANGUAGES, null)?.isNotEmpty() == true)
     }
 
+    fun getRecentSearches(): List<String> {
+        val raw = prefs.getString(KEY_RECENT_SEARCHES, null) ?: return emptyList()
+        return try {
+            raw.split("|||").filter { it.isNotBlank() }.take(3)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addRecentSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        val current = getRecentSearches().toMutableList()
+        current.removeAll { it.equals(trimmed, ignoreCase = true) }
+        current.add(0, trimmed)
+        val toSave = current.take(3).joinToString("|||")
+        prefs.edit().putString(KEY_RECENT_SEARCHES, toSave).apply()
+    }
+
+    fun removeRecentSearch(query: String) {
+        val trimmed = query.trim()
+        val current = getRecentSearches().toMutableList()
+        current.removeAll { it.equals(trimmed, ignoreCase = true) }
+        val toSave = current.take(3).joinToString("|||")
+        prefs.edit().putString(KEY_RECENT_SEARCHES, toSave).apply()
+    }
+
+    fun clearRecentSearches() {
+        prefs.edit().remove(KEY_RECENT_SEARCHES).apply()
+    }
+
     companion object {
+        private const val KEY_RECENT_SEARCHES = "recent_searches"
         private const val KEY_SELECTED_LANGUAGES = "selected_languages"
         private const val KEY_TRACK_ID = "last_track_id"
         private const val KEY_POSITION_MS = "last_position_ms"

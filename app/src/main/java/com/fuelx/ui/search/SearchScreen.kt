@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
@@ -29,27 +31,29 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.data.MusicRepository
+import com.fuelx.data.PlaybackPreferences
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
 import com.fuelx.ui.theme.*
 import com.fuelx.util.cleanArtistString
 import kotlinx.coroutines.delay
 
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
-
 @Composable
 fun SearchScreen(
     repository: MusicRepository,
     currentTrack: Track?,
+    selectedLanguages: Set<String> = emptySet(),
+    history: List<Track> = emptyList(),
+    favorites: List<Track> = emptyList(),
     isFavorite: (String) -> Boolean = { false },
     onToggleFavorite: (Track) -> Unit = {},
     onAddToQueue: (Track) -> Unit = {},
@@ -58,26 +62,47 @@ fun SearchScreen(
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val preferences = remember { PlaybackPreferences(context) }
+    var recentSearches by remember { mutableStateOf(preferences.getRecentSearches()) }
+
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var recommendedTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var retryTrigger by remember { mutableIntStateOf(0) }
 
-    // Debounced real search against MusicRepository
-    LaunchedEffect(searchQuery, retryTrigger) {
+    // Real recommendations & debounced search against MusicRepository
+    LaunchedEffect(searchQuery, retryTrigger, selectedLanguages, history.size, favorites.size) {
         if (searchQuery.isBlank()) {
             isLoading = true
             errorMessage = null
-            val result = repository.getTrending()
-            isLoading = false
-            if (result.isSuccess) {
-                searchResults = result.getOrDefault(emptyList())
-            } else {
-                errorMessage = result.exceptionOrNull()?.message ?: "Unable to load tracks"
+            try {
+                // 1. Try recommendations based on user's recent history or favorites
+                val seedTrack = history.firstOrNull() ?: favorites.firstOrNull()
+                var recs: List<Track> = emptyList()
+                if (seedTrack != null) {
+                    val radioResult = repository.getRadio(seedTrack.id)
+                    if (radioResult.isSuccess) {
+                        recs = radioResult.getOrDefault(emptyList())
+                    }
+                }
+                // 2. If no history or radio empty, load curated trending in user's selected languages
+                if (recs.isEmpty()) {
+                    val trendingResult = repository.getTrending(selectedLanguages)
+                    if (trendingResult.isSuccess) {
+                        recs = trendingResult.getOrDefault(emptyList())
+                    }
+                }
+                recommendedTracks = recs.take(7)
+            } catch (e: Exception) {
+                errorMessage = e.message ?: "Unable to load recommendations"
+            } finally {
+                isLoading = false
             }
         } else {
             // Debounce: wait 350ms before executing search
@@ -172,6 +197,10 @@ fun SearchScreen(
             keyboardActions = KeyboardActions(onSearch = {
                 keyboardController?.hide()
                 focusManager.clearFocus()
+                if (searchQuery.isNotBlank()) {
+                    preferences.addRecentSearch(searchQuery)
+                    recentSearches = preferences.getRecentSearches()
+                }
             }),
             shape = searchBarShape,
             colors = OutlinedTextFieldDefaults.colors(
@@ -199,7 +228,7 @@ fun SearchScreen(
                         CircularProgressIndicator(color = AccentPrimary, strokeWidth = 3.dp)
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = if (searchQuery.isBlank()) "Loading catalog..." else "Searching for \"$searchQuery\"...",
+                            text = if (searchQuery.isBlank()) "Curating recommendations..." else "Searching for \"$searchQuery\"...",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -253,7 +282,7 @@ fun SearchScreen(
                 }
             }
 
-            searchResults.isEmpty() -> {
+            searchQuery.isNotBlank() && searchResults.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -274,205 +303,386 @@ fun SearchScreen(
                     contentPadding = PaddingValues(bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(searchResults) { track ->
-                        val isCurrent = track.id == currentTrack?.id
-                        val cleanArtist = remember(track.artist) {
-                            cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
-                        }
-                        val itemShape = RoundedCornerShape(16.dp)
-                        val itemBg = if (isCurrent) {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    AccentPrimary.copy(alpha = 0.16f),
-                                    Color(0xFF16161E).copy(alpha = 0.75f)
-                                )
-                            )
-                        } else {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFF131318).copy(alpha = 0.65f),
-                                    Color(0xFF0F0F13).copy(alpha = 0.75f)
-                                )
-                            )
-                        }
-                        val itemBorder = if (isCurrent) {
-                            BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
-                        } else {
-                            BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(itemShape)
-                                .background(itemBg)
-                                .border(itemBorder, itemShape)
-                                .clickable {
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    onTrackSelect(track, searchResults)
+                    if (searchQuery.isBlank()) {
+                        // Display the last 3 searches with a cross button on the side to delete
+                        if (recentSearches.isNotEmpty()) {
+                            item(key = "recent_searches_header") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = null,
+                                            tint = AccentPrimary,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Recent Searches",
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                letterSpacing = (-0.2).sp
+                                            ),
+                                            color = TextPrimary
+                                        )
+                                    }
+                                    Text(
+                                        text = "Clear all",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = TextSecondary.copy(alpha = 0.70f),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                preferences.clearRecentSearches()
+                                                recentSearches = emptyList()
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
                                 }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Thumbnail with live equalizer
+                            }
+
+                            items(recentSearches.take(3), key = { "recent_$it" }) { query ->
+                                val chipShape = RoundedCornerShape(14.dp)
                                 Box(
                                     modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
+                                        .fillMaxWidth()
+                                        .clip(chipShape)
+                                        .background(Color(0xFF14141B).copy(alpha = 0.70f))
+                                        .border(
+                                            BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                                            chipShape
+                                        )
+                                        .clickable {
+                                            searchQuery = query
+                                            keyboardController?.hide()
+                                            focusManager.clearFocus()
+                                            preferences.addRecentSearch(query)
+                                            recentSearches = preferences.getRecentSearches()
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
-                                    TrackArtwork(
-                                        artworkUrl = track.displayArtwork,
-                                        contentDescription = "${track.title} artwork",
-                                        modifier = Modifier.fillMaxSize(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        placeholderColor = DarkSurfaceVariant,
-                                        placeholderText = "♪"
-                                    )
-                                    if (isCurrent) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(Color.Black.copy(alpha = 0.60f)),
-                                            contentAlignment = Alignment.Center
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = null,
+                                            tint = AccentPrimary.copy(alpha = 0.85f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = query,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.Medium,
+                                                fontSize = 14.sp
+                                            ),
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                preferences.removeRecentSearch(query)
+                                                recentSearches = preferences.getRecentSearches()
+                                            },
+                                            modifier = Modifier.size(30.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Rounded.GraphicEq,
-                                                contentDescription = "Playing",
-                                                tint = AccentPrimary,
-                                                modifier = Modifier.size(24.dp)
+                                                imageVector = Icons.Rounded.Clear,
+                                                contentDescription = "Delete search",
+                                                tint = TextSecondary.copy(alpha = 0.65f),
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
                                 }
+                            }
 
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = track.title,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                                            fontSize = 14.sp,
-                                            letterSpacing = (-0.2).sp
-                                        ),
-                                        color = if (isCurrent) AccentPrimary else TextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = cleanArtist,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Normal
-                                        ),
-                                        color = TextSecondary.copy(alpha = 0.70f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                track.formattedDuration?.let { dur ->
-                                    Text(
-                                        text = dur,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextMuted,
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                }
-
-                                val fav = isFavorite(track.id)
-
-                                // Quick Favorite button
-                                IconButton(
-                                    onClick = { onToggleFavorite(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                        contentDescription = if (fav) "Remove favorite" else "Favorite",
-                                        tint = if (fav) AccentPrimary else TextSecondary.copy(alpha = 0.50f),
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
-
-                                var showMenu by remember { mutableStateOf(false) }
-
-                                Box {
-                                    IconButton(
-                                        onClick = { showMenu = true },
-                                        modifier = Modifier.size(34.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.MoreVert,
-                                            contentDescription = "Song options",
-                                            tint = TextSecondary.copy(alpha = 0.70f),
-                                            modifier = Modifier.size(19.dp)
-                                        )
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showMenu,
-                                        onDismissRequest = { showMenu = false },
-                                        modifier = Modifier
-                                            .background(Color(0xFF181820))
-                                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = "Add to Queue",
-                                                    color = TextPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                                                )
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-                                                    contentDescription = null,
-                                                    tint = AccentPrimary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            },
-                                            onClick = {
-                                                showMenu = false
-                                                onAddToQueue(track)
-                                            }
-                                        )
-
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = "Add to Playlist",
-                                                    color = TextPrimary,
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                                                )
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                                                    contentDescription = null,
-                                                    tint = AccentPrimary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            },
-                                            onClick = {
-                                                showMenu = false
-                                                onAddToPlaylist(track)
-                                            }
-                                        )
-                                    }
-                                }
+                            item(key = "recent_searches_spacer") {
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
                         }
+
+                        // Curated Recommendations Section
+                        if (recommendedTracks.isNotEmpty()) {
+                            item(key = "recommendations_header") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.GraphicEq,
+                                        contentDescription = null,
+                                        tint = AccentPrimary,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Recommended for You",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            letterSpacing = (-0.2).sp
+                                        ),
+                                        color = TextPrimary
+                                    )
+                                }
+                            }
+
+                            items(recommendedTracks.take(7), key = { "rec_${it.id}" }) { track ->
+                                SearchTrackItem(
+                                    track = track,
+                                    isCurrent = track.id == currentTrack?.id,
+                                    isFavorite = isFavorite(track.id),
+                                    onToggleFavorite = { onToggleFavorite(track) },
+                                    onAddToQueue = { onAddToQueue(track) },
+                                    onAddToPlaylist = { onAddToPlaylist(track) },
+                                    onClick = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        onTrackSelect(track, recommendedTracks)
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        // Live Search Results
+                        items(searchResults, key = { "search_${it.id}" }) { track ->
+                            SearchTrackItem(
+                                track = track,
+                                isCurrent = track.id == currentTrack?.id,
+                                isFavorite = isFavorite(track.id),
+                                onToggleFavorite = { onToggleFavorite(track) },
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
+                                onClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    if (searchQuery.isNotBlank()) {
+                                        preferences.addRecentSearch(searchQuery)
+                                        recentSearches = preferences.getRecentSearches()
+                                    }
+                                    onTrackSelect(track, searchResults)
+                                }
+                            )
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTrackItem(
+    track: Track,
+    isCurrent: Boolean,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onClick: () -> Unit
+) {
+    val cleanArtist = remember(track.artist) {
+        cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
+    }
+    val itemShape = RoundedCornerShape(16.dp)
+    val itemBg = if (isCurrent) {
+        Brush.horizontalGradient(
+            listOf(
+                AccentPrimary.copy(alpha = 0.16f),
+                Color(0xFF16161E).copy(alpha = 0.75f)
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            listOf(
+                Color(0xFF131318).copy(alpha = 0.65f),
+                Color(0xFF0F0F13).copy(alpha = 0.75f)
+            )
+        )
+    }
+    val itemBorder = if (isCurrent) {
+        BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.45f))
+    } else {
+        BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(itemShape)
+            .background(itemBg)
+            .border(itemBorder, itemShape)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Thumbnail with live equalizer
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(BorderStroke(0.6.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                TrackArtwork(
+                    artworkUrl = track.displayArtwork,
+                    contentDescription = "${track.title} artwork",
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(10.dp),
+                    placeholderColor = DarkSurfaceVariant,
+                    placeholderText = "♪"
+                )
+                if (isCurrent) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.60f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GraphicEq,
+                            contentDescription = "Playing",
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        letterSpacing = (-0.2).sp
+                    ),
+                    color = if (isCurrent) AccentPrimary else TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = cleanArtist,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    color = TextSecondary.copy(alpha = 0.70f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            track.formattedDuration?.let { dur ->
+                Text(
+                    text = dur,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+
+            // Quick Favorite button
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Remove favorite" else "Favorite",
+                    tint = if (isFavorite) AccentPrimary else TextSecondary.copy(alpha = 0.50f),
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+
+            var showMenu by remember { mutableStateOf(false) }
+
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "Song options",
+                        tint = TextSecondary.copy(alpha = 0.70f),
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier
+                        .background(Color(0xFF181820))
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Queue",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToQueue()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Add to Playlist",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                contentDescription = null,
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onAddToPlaylist()
+                        }
+                    )
                 }
             }
         }
