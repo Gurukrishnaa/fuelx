@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -387,15 +387,14 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 // Tracks List
-                itemsIndexed(
+                items(
                     playlist.tracks,
-                    key = { _, track -> track.id },
-                    contentType = { _, _ -> "playlist_track" }
-                ) { index, track ->
+                    key = { it.id },
+                    contentType = { "playlist_track" }
+                ) { track ->
                     val isCurrent = track.id == currentTrack?.id
                     PlaylistTrackItem(
                         track = track,
-                        index = index + 1,
                         isCurrent = isCurrent,
                         isPlaying = isCurrent && isPlaying,
                         onClick = { onPlayTrack(track, playlist.tracks) },
@@ -412,7 +411,6 @@ fun PlaylistDetailScreen(
 @Composable
 private fun PlaylistTrackItem(
     track: Track,
-    index: Int,
     isCurrent: Boolean,
     isPlaying: Boolean,
     onClick: () -> Unit,
@@ -463,19 +461,6 @@ private fun PlaylistTrackItem(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Index number
-            Text(
-                text = index.toString().padStart(2, '0'),
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.SemiBold,
-                    fontSize = 13.sp
-                ),
-                color = if (isCurrent) AccentPrimary else TextSecondary.copy(alpha = 0.5f),
-                modifier = Modifier.width(26.dp)
-            )
-
-            Spacer(modifier = Modifier.width(4.dp))
-
             // Artwork
             Box(
                 modifier = Modifier

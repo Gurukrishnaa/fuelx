@@ -435,6 +435,12 @@ fun FuelXApp() {
                                         snackbarHostState.showSnackbar("Created playlist \"$name\"", duration = SnackbarDuration.Short)
                                     }
                                 },
+                                onImportPlaylist = { name, tracks ->
+                                    coroutineScope.launch {
+                                        libraryRepository.createPlaylistWithTracks(name, tracks)
+                                        snackbarHostState.showSnackbar("Imported \"$name\" with ${tracks.size} songs", duration = SnackbarDuration.Short)
+                                    }
+                                },
                                 onDeletePlaylist = { pid ->
                                     coroutineScope.launch {
                                         libraryRepository.deletePlaylist(pid)

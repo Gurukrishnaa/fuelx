@@ -468,6 +468,47 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
+    fun createPlaylistWithTracks(name: String, tracks: List<Track>, createdAt: Long = System.currentTimeMillis()): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val playlistValues = ContentValues().apply {
+                put(COL_NAME, name.trim())
+                put(COL_CREATED_AT, createdAt)
+            }
+            val playlistId = db.insert(TABLE_PLAYLISTS, null, playlistValues)
+            if (playlistId == -1L) return -1L
+
+            val seenTrackIds = mutableSetOf<String>()
+            var position = 0
+            for (track in tracks) {
+                if (!seenTrackIds.add(track.id)) continue
+
+                val trackValues = ContentValues().apply {
+                    put(COL_PLAYLIST_ID, playlistId)
+                    put(COL_TRACK_ID, track.id)
+                    put(COL_TITLE, track.title)
+                    put(COL_ARTIST, track.artist)
+                    put(COL_ALBUM, track.album)
+                    put(COL_DURATION_MS, track.durationMs ?: 0L)
+                    put(COL_ARTWORK_URL, track.artworkUrl)
+                    put(COL_STREAM_URI, track.streamUri)
+                    put(COL_LOCAL_FILE_PATH, track.localFilePath)
+                    put(COL_LOCAL_ARTWORK_PATH, track.localArtworkPath)
+                    put(COL_ADDED_AT, createdAt + position)
+                    put(COL_POSITION, position)
+                }
+                db.insert(TABLE_PLAYLIST_TRACKS, null, trackValues)
+                position++
+            }
+
+            db.setTransactionSuccessful()
+            return playlistId
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     // --- PLAYLIST OPERATIONS ---
 
     fun createPlaylist(name: String, createdAt: Long = System.currentTimeMillis()): Long {

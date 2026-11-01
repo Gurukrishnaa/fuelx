@@ -25,6 +25,8 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fuelx.data.importer.YoutubePlaylistImporter
 import com.fuelx.model.Playlist
 import com.fuelx.model.Track
 import com.fuelx.ui.components.TrackArtwork
@@ -46,6 +49,11 @@ enum class LibraryTab {
     FAVORITES,
     DOWNLOADS,
     HISTORY
+}
+
+private enum class AddPlaylistMode {
+    CREATE,
+    IMPORT
 }
 
 @Composable
@@ -63,6 +71,7 @@ fun LibraryScreen(
     onDeleteDownload: (Track) -> Unit = {},
     onClearHistory: () -> Unit,
     onCreatePlaylist: (String) -> Unit = {},
+    onImportPlaylist: (name: String, tracks: List<Track>) -> Unit = { _, _ -> },
     onDeletePlaylist: (Long) -> Unit = {},
     onSelectPlaylist: (Playlist) -> Unit = {},
     onPlayPlaylist: (Playlist) -> Unit = {},
@@ -72,70 +81,238 @@ fun LibraryScreen(
 ) {
     var selectedTab by remember { mutableStateOf(LibraryTab.PLAYLISTS) }
     var showClearHistoryDialog by remember { mutableStateOf(false) }
-    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var showAddPlaylistDialog by remember { mutableStateOf(false) }
+    var addPlaylistMode by remember { mutableStateOf(AddPlaylistMode.CREATE) }
     var newPlaylistName by remember { mutableStateOf("") }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var trackToDelete by remember { mutableStateOf<Track?>(null) }
 
-    // Create Playlist Dialog
-    if (showCreatePlaylistDialog) {
+    // Import Playlist state
+    var importLinkInput by remember { mutableStateOf("") }
+    var isImporting by remember { mutableStateOf(false) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var importProgressText by remember { mutableStateOf<String?>(null) }
+    var importJob by remember { mutableStateOf<Job?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val playlistImporter = remember { YoutubePlaylistImporter() }
+
+    // Add Playlist Dialog (Create or Import)
+    if (showAddPlaylistDialog) {
         AlertDialog(
             onDismissRequest = {
-                showCreatePlaylistDialog = false
-                newPlaylistName = ""
+                if (!isImporting) {
+                    showAddPlaylistDialog = false
+                    newPlaylistName = ""
+                    importLinkInput = ""
+                    importError = null
+                    importProgressText = null
+                }
             },
             title = {
                 Text(
-                    text = "New Playlist",
+                    text = "Add Playlist",
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary
                 )
             },
             text = {
                 Column {
-                    Text(
-                        text = "Enter a name for your playlist:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = newPlaylistName,
-                        onValueChange = { newPlaylistName = it },
-                        placeholder = { Text("My Playlist", color = TextMuted) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentPrimary,
-                            unfocusedBorderColor = DarkSurfaceVariant,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            cursorColor = AccentPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Segmented Tabs: "Create New" vs "Import Link"
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF161622))
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), RoundedCornerShape(12.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(if (addPlaylistMode == AddPlaylistMode.CREATE) AccentPrimary else Color.Transparent)
+                                .clickable {
+                                    if (!isImporting) {
+                                        addPlaylistMode = AddPlaylistMode.CREATE
+                                        importError = null
+                                    }
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Create New",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (addPlaylistMode == AddPlaylistMode.CREATE) DarkBackground else TextSecondary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(if (addPlaylistMode == AddPlaylistMode.IMPORT) AccentPrimary else Color.Transparent)
+                                .clickable {
+                                    if (!isImporting) {
+                                        addPlaylistMode = AddPlaylistMode.IMPORT
+                                    }
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Import Link",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (addPlaylistMode == AddPlaylistMode.IMPORT) DarkBackground else TextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    if (addPlaylistMode == AddPlaylistMode.CREATE) {
+                        Text(
+                            text = "Enter a name for your playlist:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = newPlaylistName,
+                            onValueChange = { newPlaylistName = it },
+                            placeholder = { Text("My Playlist", color = TextMuted) },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentPrimary,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = AccentPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = "Paste a Spotify, YouTube, or YouTube Music playlist link:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = importLinkInput,
+                            onValueChange = {
+                                importLinkInput = it
+                                if (importError != null) importError = null
+                            },
+                            placeholder = { Text("paste your playlist link", color = TextMuted) },
+                            singleLine = true,
+                            enabled = !isImporting,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentPrimary,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = AccentPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (isImporting) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = AccentPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Text(
+                                    text = importProgressText ?: "Reading playlist...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AccentPrimary
+                                )
+                            }
+                        }
+
+                        importError?.let { err ->
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = err,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val trimmed = newPlaylistName.trim()
-                        if (trimmed.isNotEmpty()) {
-                            onCreatePlaylist(trimmed)
-                            newPlaylistName = ""
-                            showCreatePlaylistDialog = false
-                        }
-                    },
-                    enabled = newPlaylistName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
-                ) {
-                    Text("Create", color = DarkBackground, fontWeight = FontWeight.Bold)
+                if (addPlaylistMode == AddPlaylistMode.CREATE) {
+                    Button(
+                        onClick = {
+                            val trimmed = newPlaylistName.trim()
+                            if (trimmed.isNotEmpty()) {
+                                onCreatePlaylist(trimmed)
+                                newPlaylistName = ""
+                                showAddPlaylistDialog = false
+                            }
+                        },
+                        enabled = newPlaylistName.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Create", color = DarkBackground, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            val link = importLinkInput.trim()
+                            if (link.isNotBlank() && !isImporting) {
+                                isImporting = true
+                                importError = null
+                                importProgressText = "Fetching playlist details..."
+
+                                importJob = coroutineScope.launch {
+                                    val result = playlistImporter.importPlaylist(link) { statusText ->
+                                        importProgressText = statusText
+                                    }
+
+                                    isImporting = false
+                                    importJob = null
+                                    if (result.isSuccess) {
+                                        val imported = result.getOrThrow()
+                                        onImportPlaylist(imported.name, imported.tracks)
+                                        showAddPlaylistDialog = false
+                                        importLinkInput = ""
+                                        importError = null
+                                        importProgressText = null
+                                    } else {
+                                        importError = result.exceptionOrNull()?.message ?: "Failed to import playlist"
+                                    }
+                                }
+                            }
+                        },
+                        enabled = importLinkInput.isNotBlank() && !isImporting,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text(if (isImporting) "Importing..." else "Import", color = DarkBackground, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showCreatePlaylistDialog = false
-                    newPlaylistName = ""
-                }) {
+                TextButton(
+                    onClick = {
+                        importJob?.cancel()
+                        importJob = null
+                        isImporting = false
+                        showAddPlaylistDialog = false
+                        newPlaylistName = ""
+                        importLinkInput = ""
+                        importError = null
+                        importProgressText = null
+                    }
+                ) {
                     Text("Cancel", color = TextSecondary)
                 }
             },
@@ -258,7 +435,10 @@ fun LibraryScreen(
                         subtitle = "Create your own playlists to group and play your favorite songs.",
                         actionButton = {
                             Button(
-                                onClick = { showCreatePlaylistDialog = true },
+                                onClick = {
+                                    addPlaylistMode = AddPlaylistMode.CREATE
+                                    showAddPlaylistDialog = true
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary),
                                 shape = RoundedCornerShape(20.dp)
                             ) {
@@ -269,7 +449,7 @@ fun LibraryScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Create Playlist", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                Text("Add Playlist", color = DarkBackground, fontWeight = FontWeight.Bold)
                             }
                         }
                     )
@@ -293,7 +473,10 @@ fun LibraryScreen(
                                     color = TextPrimary
                                 )
                                 Button(
-                                    onClick = { showCreatePlaylistDialog = true },
+                                    onClick = {
+                                        addPlaylistMode = AddPlaylistMode.CREATE
+                                        showAddPlaylistDialog = true
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary),
                                     shape = RoundedCornerShape(20.dp),
                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
@@ -305,7 +488,7 @@ fun LibraryScreen(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("New Playlist", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                    Text("Add Playlist", color = DarkBackground, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

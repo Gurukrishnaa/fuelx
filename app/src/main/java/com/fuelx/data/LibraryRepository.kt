@@ -34,6 +34,7 @@ interface LibraryRepository {
     suspend fun removeDownload(trackId: String)
 
     suspend fun createPlaylist(name: String): Long
+    suspend fun createPlaylistWithTracks(name: String, tracks: List<Track>): Long
     suspend fun deletePlaylist(playlistId: Long): Boolean
     suspend fun renamePlaylist(playlistId: Long, newName: String): Boolean
     suspend fun addTrackToPlaylist(playlistId: Long, track: Track): Boolean
@@ -163,6 +164,12 @@ class DefaultLibraryRepository(
 
     override suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
         val id = database.createPlaylist(name)
+        _playlists.value = database.getAllPlaylists()
+        id
+    }
+
+    override suspend fun createPlaylistWithTracks(name: String, tracks: List<Track>): Long = withContext(Dispatchers.IO) {
+        val id = database.createPlaylistWithTracks(name, tracks)
         _playlists.value = database.getAllPlaylists()
         id
     }
