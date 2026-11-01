@@ -58,4 +58,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            try {
+                com.fuelx.playback.PlayerController.instance?.clearState()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        super.onDestroy()
+    }
 }

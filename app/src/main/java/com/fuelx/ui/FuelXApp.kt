@@ -59,7 +59,7 @@ fun FuelXApp() {
     val context = LocalContext.current
     val preferences = remember { PlaybackPreferences(context) }
     val repository = remember { DefaultMusicRepository() }
-    val lyricsRepository = remember { DefaultLyricsRepository() }
+    val lyricsRepository = remember { DefaultLyricsRepository(context) }
     val libraryRepository = remember { DefaultLibraryRepository.getInstance(context) }
     val downloadManager = remember { TrackDownloadManager.getInstance(context, repository, libraryRepository) }
     val playerController = remember { PlayerController(context, repository, libraryRepository) }

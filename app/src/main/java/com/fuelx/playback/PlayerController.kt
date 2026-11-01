@@ -377,20 +377,29 @@ class PlayerController(
                 }
                 _currentTrack.value = effectiveTrack
 
-                val artUri = when {
-                    !effectiveTrack.localArtworkPath.isNullOrBlank() && java.io.File(effectiveTrack.localArtworkPath).exists() -> {
-                        Uri.fromFile(java.io.File(effectiveTrack.localArtworkPath))
+                val localArtFile = if (!effectiveTrack.localArtworkPath.isNullOrBlank()) java.io.File(effectiveTrack.localArtworkPath) else null
+                val artworkBytes = if (localArtFile != null && localArtFile.exists() && localArtFile.length() > 0L) {
+                    try {
+                        localArtFile.readBytes()
+                    } catch (e: Exception) {
+                        null
                     }
-                    !effectiveTrack.artworkUrl.isNullOrBlank() -> Uri.parse(effectiveTrack.artworkUrl)
-                    else -> null
-                }
+                } else null
 
-                val metadata = MediaMetadata.Builder()
+                val safeArtUri = if (!effectiveTrack.artworkUrl.isNullOrBlank() && (effectiveTrack.artworkUrl.startsWith("http://") || effectiveTrack.artworkUrl.startsWith("https://"))) {
+                    Uri.parse(effectiveTrack.artworkUrl)
+                } else null
+
+                val metadataBuilder = MediaMetadata.Builder()
                     .setTitle(effectiveTrack.title)
                     .setArtist(effectiveTrack.artist)
                     .setAlbumTitle(effectiveTrack.album)
-                    .setArtworkUri(artUri)
-                    .build()
+                    .setArtworkUri(safeArtUri)
+
+                if (artworkBytes != null) {
+                    metadataBuilder.setArtworkData(artworkBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                }
+                val metadata = metadataBuilder.build()
 
                 // Omit hardcoded setMimeType so ExoPlayer's extractors auto-detect container (m4a/aac or webm/opus) from file headers
                 val mediaItem = MediaItem.Builder()

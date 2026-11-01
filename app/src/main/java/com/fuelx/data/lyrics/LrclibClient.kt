@@ -63,6 +63,141 @@ class LrclibClient(
         }
     }
 
+    suspend fun fetchRawLyrics(track: Track): String? = withContext(Dispatchers.IO) {
+        try {
+            val cleanTitle = cleanTrackTitle(track.title)
+            val primaryArt = extractPrimaryArtist(track.artist)
+            val fullArt = track.artist.replace(Regex("""(?i)\s*-\s*Topic"""), "").trim()
+
+            // Strategy 1: Exact lookup
+            fetchExactRaw(cleanTitle, primaryArt)?.let { return@withContext it }
+
+            // Strategy 2: If primary artist differs from full artist, try full artist
+            if (primaryArt != fullArt && fullArt.isNotBlank()) {
+                fetchExactRaw(cleanTitle, fullArt)?.let { return@withContext it }
+            }
+
+            // Strategy 3: Raw cleaned title if it differed
+            val rawTitle = track.title.replace("\"", "").trim()
+            if (rawTitle != cleanTitle && rawTitle.isNotBlank()) {
+                fetchExactRaw(rawTitle, primaryArt)?.let { return@withContext it }
+            }
+
+            // Strategy 4: Field-based search
+            fetchSearchByFieldsRaw(cleanTitle, primaryArt)?.let { return@withContext it }
+
+            // Strategy 5: Query search
+            fetchViaSearchRaw("$cleanTitle $primaryArt")?.let { return@withContext it }
+
+            // Strategy 6: Query with clean title only
+            if (cleanTitle.length >= 3) {
+                fetchViaSearchRaw(cleanTitle)?.let { return@withContext it }
+            }
+
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun fetchExactRaw(trackTitle: String, artistName: String): String? {
+        if (trackTitle.isBlank() || artistName.isBlank()) return null
+        val uri = Uri.parse("$BASE_URL/api/get").buildUpon()
+            .appendQueryParameter("track_name", trackTitle)
+            .appendQueryParameter("artist_name", artistName)
+            .build()
+
+        val request = Request.Builder()
+            .url(uri.toString())
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            extractRawFromResponse(JSONObject(bodyString))
+        }
+    }
+
+    private fun fetchSearchByFieldsRaw(trackTitle: String, artistName: String): String? {
+        if (trackTitle.isBlank()) return null
+        val uriBuilder = Uri.parse("$BASE_URL/api/search").buildUpon()
+            .appendQueryParameter("track_name", trackTitle)
+        if (artistName.isNotBlank()) {
+            uriBuilder.appendQueryParameter("artist_name", artistName)
+        }
+
+        val request = Request.Builder()
+            .url(uriBuilder.build().toString())
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            extractRawFromSearchArray(bodyString)
+        }
+    }
+
+    private fun fetchViaSearchRaw(query: String): String? {
+        if (query.isBlank()) return null
+        val uri = Uri.parse("$BASE_URL/api/search").buildUpon()
+            .appendQueryParameter("q", query.trim())
+            .build()
+
+        val request = Request.Builder()
+            .url(uri.toString())
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build()
+
+        val response = executeWithRetry(request) ?: return null
+        return response.use { res ->
+            if (!res.isSuccessful) return null
+            val bodyString = res.body?.string() ?: return null
+            extractRawFromSearchArray(bodyString)
+        }
+    }
+
+    private fun extractRawFromResponse(json: JSONObject): String? {
+        val isInstrumental = json.optBoolean("instrumental", false)
+        if (isInstrumental) {
+            return "[instrumental]"
+        }
+        val synced = json.optString("syncedLyrics").takeIf { it.isNotBlank() }
+        if (synced != null) return synced
+        val plain = json.optString("plainLyrics").takeIf { it.isNotBlank() }
+        return plain
+    }
+
+    private fun extractRawFromSearchArray(bodyString: String): String? {
+        val array = JSONArray(bodyString)
+        if (array.length() == 0) return null
+
+        var fallbackPlain: String? = null
+        for (i in 0 until array.length()) {
+            val item = array.getJSONObject(i)
+            val isInstrumental = item.optBoolean("instrumental", false)
+            if (isInstrumental) {
+                if (fallbackPlain == null) fallbackPlain = "[instrumental]"
+                continue
+            }
+            val synced = item.optString("syncedLyrics").takeIf { it.isNotBlank() }
+            if (synced != null) {
+                return synced
+            }
+            if (fallbackPlain == null) {
+                val plain = item.optString("plainLyrics").takeIf { it.isNotBlank() }
+                if (plain != null) fallbackPlain = plain
+            }
+        }
+        return fallbackPlain
+    }
+
     private fun fetchExact(trackTitle: String, artistName: String): ParsedLyrics? {
         if (trackTitle.isBlank() || artistName.isBlank()) return null
         val uri = Uri.parse("$BASE_URL/api/get").buildUpon()

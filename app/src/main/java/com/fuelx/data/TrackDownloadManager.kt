@@ -2,6 +2,7 @@ package com.fuelx.data
 
 import android.content.Context
 import android.util.Log
+import com.fuelx.data.lyrics.LrclibClient
 import com.fuelx.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +40,8 @@ class TrackDownloadManager(
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
+
+    private val lrclibClient = LrclibClient()
 
     private val downloadsDir = File(context.filesDir, "downloads").apply {
         if (!exists()) mkdirs()
@@ -209,6 +212,18 @@ class TrackDownloadManager(
                     }
                 }
 
+                // 3b. Best-effort Lyrics Caching
+                val targetLyrics = File(downloadsDir, "${track.id}.lrc")
+                try {
+                    val rawLyrics = lrclibClient.fetchRawLyrics(track)
+                    if (!rawLyrics.isNullOrBlank()) {
+                        targetLyrics.writeText(rawLyrics)
+                        Log.d("TrackDownloadManager", "Successfully downloaded lyrics for: ${track.title}")
+                    }
+                } catch (e: Exception) {
+                    Log.w("TrackDownloadManager", "Lyrics download ignored for ${track.id}: ${e.message}")
+                }
+
                 // 4. Save to Database
                 val downloadedTrack = track.copy(
                     localFilePath = targetAudio.absolutePath,
@@ -255,11 +270,13 @@ class TrackDownloadManager(
             val m4aFile = File(downloadsDir, "$trackId.m4a")
             val webmFile = File(downloadsDir, "$trackId.webm")
             val artFile = File(downloadsDir, "$trackId.jpg")
+            val lrcFile = File(downloadsDir, "$trackId.lrc")
             val tempAudio = File(downloadsDir, "$trackId.tmp")
 
             if (m4aFile.exists()) m4aFile.delete()
             if (webmFile.exists()) webmFile.delete()
             if (artFile.exists()) artFile.delete()
+            if (lrcFile.exists()) lrcFile.delete()
             if (tempAudio.exists()) tempAudio.delete()
 
             libraryDatabase.deleteDownload(trackId)

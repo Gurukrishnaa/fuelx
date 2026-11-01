@@ -303,6 +303,13 @@ class PlaybackService : MediaSessionService() {
         notificationManager?.cancelAll()
 
         mediaSession?.run {
+            try {
+                player.pause()
+                player.stop()
+                player.clearMediaItems()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             player.release()
             release()
             mediaSession = null
