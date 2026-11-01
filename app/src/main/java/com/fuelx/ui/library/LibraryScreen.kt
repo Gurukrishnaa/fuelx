@@ -985,16 +985,20 @@ private fun LibraryTrackItem(
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
+                    containerColor = Color(0xFF131520).copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                    shadowElevation = 12.dp,
                     modifier = Modifier
-                        .background(Color(0xFF181820))
-                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
+                        .width(200.dp)
+                        .clip(RoundedCornerShape(20.dp))
                 ) {
                     DropdownMenuItem(
                         text = {
                             Text(
                                 text = if (isFav) "Remove Favorite" else "Add to Favorites",
                                 color = if (isFav) AccentPrimary else TextPrimary,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             )
                         },
                         leadingIcon = {
@@ -1012,19 +1016,26 @@ private fun LibraryTrackItem(
                     )
 
                     if (onAddToQueue != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.08f))
+                        )
+
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     text = "Add to Queue",
                                     color = TextPrimary,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 )
                             },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                                     contentDescription = null,
-                                    tint = TextSecondary,
+                                    tint = AccentPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             },
@@ -1036,19 +1047,26 @@ private fun LibraryTrackItem(
                     }
 
                     if (onAddToPlaylist != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.08f))
+                        )
+
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     text = "Add to Playlist",
                                     color = TextPrimary,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 )
                             },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
                                     contentDescription = null,
-                                    tint = TextSecondary,
+                                    tint = AccentPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             },
@@ -1060,12 +1078,19 @@ private fun LibraryTrackItem(
                     }
 
                     if (onDelete != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color.White.copy(alpha = 0.08f))
+                        )
+
                         DropdownMenuItem(
                             text = {
                                 Text(
                                     text = "Delete Download",
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 )
                             },
                             leadingIcon = {
