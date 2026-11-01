@@ -28,10 +28,15 @@ FuelX delivers an ad-free, uninterrupted listening experience with synchronized 
   - Zero-allocation brushes and shapes using Compose state memory caching.
   - Composable item recycling via explicit keys and content types.
 
+### Playlist Migration & Import
+- One-click playlist import: Paste any public playlist link from **Spotify**, **YouTube**, or **YouTube Music** to import and save entire playlists locally into FuelX.
+- Full pagination support: Effortlessly migrates large playlists of any size (100, 400+ songs) using chunked batch resolution without hitting payload limits.
+- High-fidelity matching: Employs concurrent, multi-signal scoring algorithms to match and resolve songs with accurate metadata, artwork, and streaming audio.
+
 ### Music Discovery and Library
 - Multi-language discovery: Filter and explore music across English, Hindi, Tamil, Telugu, Malayalam, Punjabi, Kannada, and Bengali.
 - Instant search with query history management.
-- Offline downloads: Save tracks locally to your device storage for offline playback.
+- Offline downloads: Save tracks and synchronized lyrics directly to your device storage for full offline listening.
 - Custom playlists, favorites, and automatic listening history tracking.
 
 ---
@@ -53,6 +58,7 @@ FuelX delivers an ad-free, uninterrupted listening experience with synchronized 
 ```
 app/src/main/java/com/fuelx/
 ├── data/
+│   ├── importer/        # Spotify & YouTube playlist link parsers and batch migrators
 │   ├── lyrics/          # LRCLIB API client and lyrics fetcher
 │   ├── youtube/         # Audio stream extractors and Invidious resolvers
 │   ├── MusicRepository  # Music search, trending catalogs, and caching
