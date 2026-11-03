@@ -5,7 +5,7 @@ import com.fuelx.model.Track
 import java.util.Random
 import kotlin.math.pow
 
-/** One row per finished / skipped play. Stored in Room (see the guide). */
+/** One row per finished / skipped play. Stored in Room / SQLite (see the guide). */
 data class ListenEvent(
     val trackId: String,
     val artist: String,
@@ -213,3 +213,4 @@ object HomeRecommender {
         return out
     }
 }
+

@@ -77,6 +77,7 @@ fun FuelXApp() {
     val downloadStates by downloadManager.downloadStates.collectAsState()
     val history by libraryRepository.history.collectAsState()
     val playlists by libraryRepository.playlists.collectAsState()
+    val listenEvents by libraryRepository.listenEvents.collectAsState()
 
     var selectedPlaylistId by remember { mutableStateOf<Long?>(null) }
     val selectedPlaylist = remember(playlists, selectedPlaylistId) {
@@ -296,6 +297,7 @@ fun FuelXApp() {
                             currentTrack = currentTrack,
                             isPlaying = isPlaying,
                             recentlyPlayed = history,
+                            events = listenEvents,
                             selectedLanguages = selectedLanguages,
                             onOpenLanguagePicker = { showLanguageDialog = true },
                             isFavorite = { id -> favorites.any { it.id == id } },

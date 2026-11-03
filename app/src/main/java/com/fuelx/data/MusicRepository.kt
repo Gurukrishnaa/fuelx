@@ -1,11 +1,11 @@
 package com.fuelx.data
 
+import com.fuelx.data.filter.SongFilter
+import com.fuelx.data.youtube.YouTubeMusicProvider
 import com.fuelx.model.StreamInfo
 import com.fuelx.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-import com.fuelx.data.youtube.YouTubeMusicProvider
 
 interface MusicRepository {
     suspend fun getTrending(): Result<List<Track>>
@@ -30,6 +30,8 @@ class DefaultMusicRepository(
     override suspend fun getTrending(languages: Set<String>): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
             val tracks = provider.getTrendingTracks(languages)
+                .filter(SongFilter::isRealSong)
+                .distinctBy(SongFilter::songKey)
             Result.success(tracks)
         } catch (e: Exception) {
             Result.failure(e)
@@ -44,6 +46,8 @@ class DefaultMusicRepository(
 
         try {
             val tracks = provider.getGenreTracks(genreId, languages)
+                .filter(SongFilter::isRealSong)
+                .distinctBy(SongFilter::songKey)
             synchronized(genreCache) {
                 if (genreCache.size >= 30) {
                     val oldestKey = genreCache.keys.first()
@@ -67,6 +71,8 @@ class DefaultMusicRepository(
 
         try {
             val results = provider.searchTracks(query)
+                .filter(SongFilter::isRealSong)
+                .distinctBy(SongFilter::songKey)
             synchronized(searchCache) {
                 if (searchCache.size >= 25) {
                     val oldestKey = searchCache.keys.first()
@@ -83,6 +89,8 @@ class DefaultMusicRepository(
     override suspend fun getRadio(seedVideoId: String): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
             val tracks = provider.getRadio(seedVideoId)
+                .filter(SongFilter::isRealSong)
+                .distinctBy(SongFilter::songKey)
             Result.success(tracks)
         } catch (e: Exception) {
             Result.failure(e)

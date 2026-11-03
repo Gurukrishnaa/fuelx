@@ -3,6 +3,7 @@ package com.fuelx.data
 import android.content.Context
 import com.fuelx.model.Playlist
 import com.fuelx.model.Track
+import com.fuelx.ui.home.ListenEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,7 @@ interface LibraryRepository {
     val history: StateFlow<List<Track>>
     val downloads: StateFlow<List<Track>>
     val playlists: StateFlow<List<Playlist>>
+    val listenEvents: StateFlow<List<ListenEvent>>
 
     fun isFavorite(trackId: String): Boolean
     suspend fun toggleFavorite(track: Track): Boolean
@@ -27,6 +29,7 @@ interface LibraryRepository {
     suspend fun removeFavorite(trackId: String)
     suspend fun recordHistory(track: Track)
     suspend fun clearHistory()
+    suspend fun recordListenEvent(event: ListenEvent)
 
     fun isDownloaded(trackId: String): Boolean
     fun getDownloadedTrack(trackId: String): Track?
@@ -60,6 +63,9 @@ class DefaultLibraryRepository(
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     override val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
+    private val _listenEvents = MutableStateFlow<List<ListenEvent>>(emptyList())
+    override val listenEvents: StateFlow<List<ListenEvent>> = _listenEvents.asStateFlow()
+
     private val favoriteIds = mutableSetOf<String>()
     private val downloadedIds = mutableSetOf<String>()
 
@@ -71,6 +77,11 @@ class DefaultLibraryRepository(
     }
 
     private suspend fun loadInitialData() = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        // Prune listen events older than 90 days at app startup
+        database.pruneListenEvents(now - 90 * 86_400_000L)
+        val events = database.getListenEventsSince(now - 90 * 86_400_000L)
+
         val favs = database.getAllFavorites()
         val hist = database.getAllHistory()
         val down = database.getAllDownloads()
@@ -90,6 +101,12 @@ class DefaultLibraryRepository(
         _history.value = hist
         _downloads.value = down
         _playlists.value = plist
+        _listenEvents.value = events
+    }
+
+    override suspend fun recordListenEvent(event: ListenEvent) = withContext(Dispatchers.IO) {
+        database.insertListenEvent(event)
+        _listenEvents.value = listOf(event) + _listenEvents.value
     }
 
     override fun isFavorite(trackId: String): Boolean {

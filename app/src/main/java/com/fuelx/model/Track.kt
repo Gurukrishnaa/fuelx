@@ -9,7 +9,9 @@ data class Track(
     val durationMs: Long? = null,
     val streamUri: String? = null,
     val localFilePath: String? = null,
-    val localArtworkPath: String? = null
+    val localArtworkPath: String? = null,
+    val videoType: String? = null,
+    val typeLabel: String? = null
 ) {
     val isDownloaded: Boolean
         get() = !localFilePath.isNullOrBlank()

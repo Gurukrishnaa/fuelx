@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fuelx.data.DefaultMusicRepository
 import com.fuelx.data.MusicRepository
+import com.fuelx.data.filter.SongFilter
 import com.fuelx.model.Track
 import com.fuelx.ui.brand.FuelXLockup
 import com.fuelx.ui.components.TrackArtwork
@@ -68,6 +69,7 @@ fun HomeScreen(
     isPlaying: Boolean,
     repository: MusicRepository = remember { DefaultMusicRepository() },
     recentlyPlayed: List<Track> = emptyList(),
+    events: List<ListenEvent> = emptyList(),
     selectedLanguages: Set<String> = emptySet(),
     onOpenLanguagePicker: () -> Unit = {},
     isFavorite: (String) -> Boolean = { false },
@@ -230,9 +232,6 @@ fun HomeScreen(
     LaunchedEffect(radioSeed?.id) {
         radio = radioSeed
             ?.let { repository.getRadio(it.id).getOrDefault(emptyList()) }
-            ?.filter(HomeSuggestions::isCleanSong)
-            ?.filter { r -> recentlyPlayed.none { it.id == r.id } }
-            ?.take(12)
             .orEmpty()
     }
 
@@ -242,16 +241,22 @@ fun HomeScreen(
     // Always call the latest isFavorite without recomputing suggestions when you tap a heart
     val favLookup by rememberUpdatedState(isFavorite)
 
-    val cleanTracks = remember(tracks) { tracks.filter(HomeSuggestions::isCleanSong) }
-    val cleanGenreTracks = remember(genreTracks) { genreTracks.filter(HomeSuggestions::isCleanSong) }
+    val cleanTracks = remember(tracks) { tracks.filter(SongFilter::isRealSong) }
+    val cleanGenreTracks = remember(genreTracks) { genreTracks.filter(SongFilter::isRealSong) }
 
-    val shelves = remember(tracks, radio, recentlyPlayed, selectedLanguages) {
-        HomeSuggestions.build(
-            pool = tracks + radio,
-            recent = recentlyPlayed,
-            isFavorite = { favLookup(it) },
-            currentId = null,          // keep null so the list doesn't change while a song plays
-            seed = seed
+    val shelves = remember(tracks, genreTracks, radio, recentlyPlayed, events, selectedGenreId) {
+        HomeRecommender.build(
+            RecoInputs(
+                chart = tracks,
+                radio = radio,
+                genre = if (selectedGenreId == "all") emptyList() else genreTracks,
+                recent = recentlyPlayed,
+                events = events,
+                isFavorite = { favLookup(it) },
+                currentId = null,
+                nowMs = System.currentTimeMillis(),
+                seed = seed
+            )
         )
     }
     val heroTrack = shelves.hero
@@ -370,8 +375,8 @@ fun HomeScreen(
             }
         }
 
-        // 2. Picked for you (personalised)
-        if (shelves.pickedForYou.isNotEmpty()) {
+        // 2. Picked for you (personalised - minimum 3 songs)
+        if (shelves.pickedForYou.size >= 3) {
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     SleekSectionHeader(
@@ -400,16 +405,14 @@ fun HomeScreen(
             }
         }
 
-        // 3. Your Next Listen (Radio if non-empty, otherwise fallback to shelves.becauseTracks)
-        val becauseTracksToShow = if (radio.isNotEmpty()) radio else shelves.becauseTracks
-
-        if (becauseTracksToShow.isNotEmpty()) {
+        // 3. Your next hear (minimum 3 songs)
+        if (shelves.becauseTitle != null && shelves.becauseTracks.size >= 3) {
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     SleekSectionHeader(
-                        title = "Your Next Listen",
-                        badgeText = if (radio.isNotEmpty()) "RADIO" else "FOR YOU",
-                        icon = Icons.Rounded.AutoAwesome,
+                        title = "Your next hear",
+                        badgeText = "FOR YOU",
+                        icon = Icons.Rounded.Headphones,
                         iconTint = AccentPrimary
                     )
                     Spacer(Modifier.height(10.dp))
@@ -417,12 +420,12 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 4.dp)
                     ) {
-                        items(becauseTracksToShow, key = { it.id }, contentType = { "recent_card" }) { track ->
+                        items(shelves.becauseTracks, key = { it.id }, contentType = { "recent_card" }) { track ->
                             RecentTrackCard(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
                                 isPlaying = track.id == currentTrack?.id && isPlaying,
-                                onClick = { onTrackSelect(track, becauseTracksToShow) }
+                                onClick = { onTrackSelect(track, shelves.becauseTracks) }
                             )
                         }
                     }
@@ -431,7 +434,37 @@ fun HomeScreen(
             }
         }
 
-        // 4. Trending (chart order, ranked list, top 6)
+        // 4. Discover: New artists for you (minimum 3 songs)
+        if (shelves.discover.size >= 3) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SleekSectionHeader(
+                        title = "New artists for you",
+                        badgeText = "DISCOVER",
+                        icon = Icons.Rounded.Explore,
+                        iconTint = AccentSecondary,
+                        subtitle = "Fresh voices outside your usual taste"
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(bottom = 4.dp)
+                    ) {
+                        items(shelves.discover, key = { it.id }, contentType = { "recent_card" }) { track ->
+                            RecentTrackCard(
+                                track = track,
+                                isSelected = track.id == currentTrack?.id,
+                                isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onClick = { onTrackSelect(track, shelves.discover) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+            }
+        }
+
+        // 5. Trending (chart order, ranked list, top 6)
         if (shelves.trending.isNotEmpty()) {
             item {
                 val title = if (selectedLanguages.isNotEmpty())
@@ -1066,8 +1099,10 @@ private fun TrackListItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                val subtitle = if (!track.album.isNullOrBlank()) {
+                val subtitle = if (!track.album.isNullOrBlank() && !track.album.equals("YouTube Music", ignoreCase = true)) {
                     "$cleanArtist • ${cleanArtistString(track.album)}"
+                } else if (track.formattedDuration != null) {
+                    "$cleanArtist • ${track.formattedDuration}"
                 } else {
                     cleanArtist
                 }

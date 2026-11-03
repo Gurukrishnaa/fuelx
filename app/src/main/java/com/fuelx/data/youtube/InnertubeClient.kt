@@ -378,7 +378,7 @@ class InnertubeClient(
             id = videoId,
             title = cleanTitle(title),
             artist = artist.ifBlank { "YouTube Music" },
-            album = "YouTube Music",
+            album = null,
             artworkUrl = thumbUrl,
             durationMs = cardDurationMs,
             streamUri = null
@@ -404,6 +404,19 @@ class InnertubeClient(
 
         if (videoId.isNullOrBlank()) return null
 
+        // (a) video type: the strongest signal
+        val videoType = (
+            renderer.optJSONObject("overlay")
+                ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("musicPlayButtonRenderer")
+                ?.optJSONObject("playNavigationEndpoint")
+                ?.optJSONObject("watchEndpoint")
+                ?.optJSONObject("watchEndpointMusicSupportedConfigs")
+                ?.optJSONObject("watchEndpointMusicConfig")
+                ?.optString("musicVideoType")
+        )?.removePrefix("MUSIC_VIDEO_TYPE_")?.takeIf { it.isNotBlank() }
+
         val flexColumns = renderer.optJSONArray("flexColumns") ?: return null
         if (flexColumns.length() == 0) return null
 
@@ -418,16 +431,33 @@ class InnertubeClient(
         var album: String? = null
         var durationMs: Long? = null
 
+        val typeWords = setOf("Song", "Video", "Episode", "Podcast", "Playlist", "Album", "Single", "EP", "Artist", "Profile")
+        var typeLabel: String? = null
+
         if (flexColumns.length() > 1) {
             val col1Runs = flexColumns.optJSONObject(1)
                 ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
                 ?.optJSONObject("text")?.optJSONArray("runs")
 
             if (col1Runs != null) {
+                val firstRunText = col1Runs.optJSONObject(0)?.optString("text")?.trim()
+                typeLabel = firstRunText?.takeIf { it in typeWords }
+
                 val groups = mutableListOf<StringBuilder>()
                 var currentGroup = StringBuilder()
 
-                for (k in 0 until col1Runs.length()) {
+                // Skip the type label and the " • " separator after it
+                var startIdx = 0
+                while (startIdx < col1Runs.length()) {
+                    val t = col1Runs.optJSONObject(startIdx)?.optString("text")?.trim().orEmpty()
+                    if (t in typeWords || t == "•") {
+                        startIdx++
+                    } else {
+                        break
+                    }
+                }
+
+                for (k in startIdx until col1Runs.length()) {
                     val runText = col1Runs.optJSONObject(k)?.optString("text").orEmpty()
                     val trimmed = runText.trim()
                     if (trimmed == "•") {
@@ -435,7 +465,7 @@ class InnertubeClient(
                             groups.add(currentGroup)
                             currentGroup = StringBuilder()
                         }
-                    } else if (trimmed.isNotEmpty() && trimmed != "Song") {
+                    } else if (trimmed.isNotEmpty() && trimmed !in typeWords) {
                         if (trimmed.matches(Regex("\\d{1,2}:\\d{2}(?::\\d{2})?"))) {
                             durationMs = parseDurationStringToMs(trimmed)
                         } else {
@@ -526,19 +556,22 @@ class InnertubeClient(
 
         if (artist.equals("Video", ignoreCase = true) && !album.isNullOrBlank()) {
             artist = album
-            album = "YouTube Music"
+            album = null
         }
 
+        val cleanAlbum = album?.takeUnless { it.equals("YouTube Music", ignoreCase = true) }
         val thumbUrl = extractThumbnail(renderer.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer"))
 
         return Track(
             id = videoId,
             title = cleanTitle(title),
             artist = artist.ifBlank { "YouTube Music" },
-            album = album ?: "YouTube Music",
+            album = cleanAlbum,
             artworkUrl = thumbUrl,
             durationMs = durationMs,
-            streamUri = null
+            streamUri = null,
+            videoType = videoType,
+            typeLabel = typeLabel
         )
     }
 

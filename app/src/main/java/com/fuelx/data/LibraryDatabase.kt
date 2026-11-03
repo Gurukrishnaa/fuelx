@@ -101,6 +101,21 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_playlist_tracks_pid ON $TABLE_PLAYLIST_TRACKS($COL_PLAYLIST_ID)")
+
+        db.execSQL(
+            """
+            CREATE TABLE $TABLE_LISTEN_EVENTS (
+                $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_TRACK_ID TEXT NOT NULL,
+                $COL_ARTIST TEXT NOT NULL,
+                $COL_PLAYED_MS INTEGER NOT NULL,
+                $COL_DURATION_MS INTEGER,
+                $COL_COMPLETED INTEGER NOT NULL,
+                $COL_AT_EPOCH_MS INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX idx_listen_events_epoch ON $TABLE_LISTEN_EVENTS($COL_AT_EPOCH_MS DESC)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -152,6 +167,22 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
                 """.trimIndent()
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_pid ON $TABLE_PLAYLIST_TRACKS($COL_PLAYLIST_ID)")
+        }
+        if (oldVersion < 4) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $TABLE_LISTEN_EVENTS (
+                    $COL_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                    $COL_TRACK_ID TEXT NOT NULL,
+                    $COL_ARTIST TEXT NOT NULL,
+                    $COL_PLAYED_MS INTEGER NOT NULL,
+                    $COL_DURATION_MS INTEGER,
+                    $COL_COMPLETED INTEGER NOT NULL,
+                    $COL_AT_EPOCH_MS INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_listen_events_epoch ON $TABLE_LISTEN_EVENTS($COL_AT_EPOCH_MS DESC)")
         }
     }
 
@@ -698,15 +729,74 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
+    // --- LISTEN EVENTS OPERATIONS (RECOMMENDATION ENGINE) ---
+
+    fun insertListenEvent(event: com.fuelx.ui.home.ListenEvent): Boolean {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put(COL_TRACK_ID, event.trackId)
+            put(COL_ARTIST, event.artist)
+            put(COL_PLAYED_MS, event.playedMs)
+            put(COL_DURATION_MS, event.durationMs ?: 0L)
+            put(COL_COMPLETED, if (event.completed) 1 else 0)
+            put(COL_AT_EPOCH_MS, event.atEpochMs)
+        }
+        return db.insert(TABLE_LISTEN_EVENTS, null, values) != -1L
+    }
+
+    fun getListenEventsSince(sinceEpochMs: Long, limit: Int = 500): List<com.fuelx.ui.home.ListenEvent> {
+        val list = mutableListOf<com.fuelx.ui.home.ListenEvent>()
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_LISTEN_EVENTS,
+            null,
+            "$COL_AT_EPOCH_MS > ?",
+            arrayOf(sinceEpochMs.toString()),
+            null,
+            null,
+            "$COL_AT_EPOCH_MS DESC",
+            limit.toString()
+        )
+        cursor.use {
+            val trackIdIdx = it.getColumnIndexOrThrow(COL_TRACK_ID)
+            val artistIdx = it.getColumnIndexOrThrow(COL_ARTIST)
+            val playedMsIdx = it.getColumnIndexOrThrow(COL_PLAYED_MS)
+            val durationMsIdx = it.getColumnIndexOrThrow(COL_DURATION_MS)
+            val completedIdx = it.getColumnIndexOrThrow(COL_COMPLETED)
+            val epochIdx = it.getColumnIndexOrThrow(COL_AT_EPOCH_MS)
+
+            while (it.moveToNext()) {
+                val dur = it.getLong(durationMsIdx).takeIf { d -> d > 0L }
+                list.add(
+                    com.fuelx.ui.home.ListenEvent(
+                        trackId = it.getString(trackIdIdx),
+                        artist = it.getString(artistIdx),
+                        playedMs = it.getLong(playedMsIdx),
+                        durationMs = dur,
+                        completed = it.getInt(completedIdx) == 1,
+                        atEpochMs = it.getLong(epochIdx)
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun pruneListenEvents(beforeEpochMs: Long): Int {
+        val db = writableDatabase
+        return db.delete(TABLE_LISTEN_EVENTS, "$COL_AT_EPOCH_MS < ?", arrayOf(beforeEpochMs.toString()))
+    }
+
     companion object {
         const val DATABASE_NAME = "fuelx_library.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
 
         const val TABLE_FAVORITES = "favorites"
         const val TABLE_HISTORY = "history"
         const val TABLE_DOWNLOADS = "downloads"
         const val TABLE_PLAYLISTS = "playlists"
         const val TABLE_PLAYLIST_TRACKS = "playlist_tracks"
+        const val TABLE_LISTEN_EVENTS = "listen_events"
 
         const val COL_ID = "id"
         const val COL_TRACK_ID = "track_id"
@@ -725,6 +815,9 @@ class LibraryDatabase(context: Context) : SQLiteOpenHelper(
         const val COL_DOWNLOADED_AT = "downloaded_at"
         const val COL_CREATED_AT = "created_at"
         const val COL_POSITION = "position"
+        const val COL_PLAYED_MS = "played_ms"
+        const val COL_COMPLETED = "completed"
+        const val COL_AT_EPOCH_MS = "at_epoch_ms"
 
         const val MAX_HISTORY_ITEMS = 100
     }

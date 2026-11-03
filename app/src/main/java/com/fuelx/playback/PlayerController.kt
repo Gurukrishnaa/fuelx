@@ -178,6 +178,34 @@ class PlayerController(
                 }
             }
 
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                val item = oldPosition.mediaItem ?: return
+                if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) return
+
+                val completed = (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
+                val trackId = item.mediaId
+                val artist = item.mediaMetadata.artist?.toString().orEmpty()
+                val playedMs = oldPosition.positionMs
+                val duration = _durationMs.value.takeIf { it > 0 }
+
+                scope.launch(Dispatchers.IO) {
+                    libraryRepository.recordListenEvent(
+                        com.fuelx.ui.home.ListenEvent(
+                            trackId = trackId,
+                            artist = artist,
+                            playedMs = playedMs,
+                            durationMs = duration,
+                            completed = completed,
+                            atEpochMs = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _isBuffering.value = (playbackState == Player.STATE_BUFFERING)
                 val dur = player.duration
@@ -350,6 +378,27 @@ class PlayerController(
 
         // Cancel any pending playback or stream resolution jobs to prevent race conditions
         playJob?.cancel()
+
+        // Record listen event for previous track if changing tracks
+        val oldTrack = _currentTrack.value
+        val oldPos = _currentPositionMs.value
+        val oldDur = _durationMs.value.takeIf { it > 0 }
+        if (oldTrack != null && oldTrack.id != track.id && oldPos > 0L) {
+            val completed = oldDur != null && oldPos >= oldDur * 0.85f
+            scope.launch(Dispatchers.IO) {
+                libraryRepository.recordListenEvent(
+                    com.fuelx.ui.home.ListenEvent(
+                        trackId = oldTrack.id,
+                        artist = oldTrack.artist,
+                        playedMs = oldPos,
+                        durationMs = oldDur,
+                        completed = completed,
+                        atEpochMs = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
         // Immediately halt position updates without saving previous song's position
         stopPositionUpdates(saveCurrentPlayerPosition = false)
         // Immediately update active track and reset progress to 0L (or targetPosition)
@@ -720,6 +769,25 @@ class PlayerController(
     }
 
     fun clearState() {
+        val oldTrack = _currentTrack.value
+        val oldPos = _currentPositionMs.value
+        val oldDur = _durationMs.value.takeIf { it > 0 }
+        if (oldTrack != null && oldPos > 0L) {
+            val completed = oldDur != null && oldPos >= oldDur * 0.85f
+            scope.launch(Dispatchers.IO) {
+                libraryRepository.recordListenEvent(
+                    com.fuelx.ui.home.ListenEvent(
+                        trackId = oldTrack.id,
+                        artist = oldTrack.artist,
+                        playedMs = oldPos,
+                        durationMs = oldDur,
+                        completed = completed,
+                        atEpochMs = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
         playJob?.cancel()
         stopPositionUpdates(saveCurrentPlayerPosition = false)
         _isShuffleMode.value = false
