@@ -76,6 +76,8 @@ fun NowPlayingScreen(
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    isShuffle: Boolean = false,
+    onToggleShuffle: () -> Unit = {},
     onRetryPlayback: () -> Unit = {},
     onRetryLyrics: () -> Unit = {},
     onRemoveFromQueue: (Int) -> Unit = {},
@@ -85,7 +87,6 @@ fun NowPlayingScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isShuffle by remember { mutableStateOf(false) }
     var showRemoveDownloadDialog by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
     var isLyricsExpanded by remember { mutableStateOf(false) }
@@ -528,7 +529,7 @@ fun NowPlayingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                IconButton(onClick = { isShuffle = !isShuffle }) {
+                IconButton(onClick = onToggleShuffle) {
                     Icon(
                         imageVector = Icons.Rounded.Shuffle,
                         contentDescription = "Shuffle",

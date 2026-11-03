@@ -73,6 +73,11 @@ class PlayerController(
     private val _isRepeatMode = MutableStateFlow(false)
     val isRepeatMode: StateFlow<Boolean> = _isRepeatMode.asStateFlow()
 
+    private val _isShuffleMode = MutableStateFlow(false)
+    val isShuffleMode: StateFlow<Boolean> = _isShuffleMode.asStateFlow()
+
+    private var originalPlaylist: List<Track> = emptyList()
+
     var playlist: List<Track> = emptyList()
         private set
     private var autoRetryCount = 0
@@ -287,7 +292,18 @@ class PlayerController(
     }
 
     fun setPlaylist(tracks: List<Track>) {
-        this.playlist = tracks
+        originalPlaylist = tracks
+        if (_isShuffleMode.value) {
+            val current = _currentTrack.value
+            if (current != null && tracks.any { it.id == current.id }) {
+                val remaining = tracks.filter { it.id != current.id }.shuffled()
+                this.playlist = listOf(current) + remaining
+            } else {
+                this.playlist = tracks.shuffled()
+            }
+        } else {
+            this.playlist = tracks
+        }
     }
 
     fun playTrack(
@@ -296,7 +312,20 @@ class PlayerController(
         forceRestart: Boolean = false,
         startPositionMs: Long? = null
     ) {
-        this.playlist = tracks
+        if (tracks !== this.playlist && tracks != this.playlist) {
+            originalPlaylist = tracks
+            if (_isShuffleMode.value) {
+                val remaining = tracks.filter { it.id != track.id }.shuffled()
+                this.playlist = listOf(track) + remaining
+            } else {
+                this.playlist = tracks
+            }
+        } else if (this.playlist.isEmpty()) {
+            this.playlist = tracks
+            if (originalPlaylist.isEmpty()) {
+                originalPlaylist = tracks
+            }
+        }
         val player = controller
 
         val isSameTrack = (_currentTrack.value?.id == track.id)
@@ -516,6 +545,37 @@ class PlayerController(
         return newMode
     }
 
+    fun toggleShuffleMode(): Boolean {
+        val newMode = !_isShuffleMode.value
+        _isShuffleMode.value = newMode
+        if (newMode) {
+            if (originalPlaylist.isEmpty() && playlist.isNotEmpty()) {
+                originalPlaylist = playlist
+            }
+            val current = _currentTrack.value
+            if (current != null && originalPlaylist.any { it.id == current.id }) {
+                val remaining = originalPlaylist.filter { it.id != current.id }.shuffled()
+                this.playlist = listOf(current) + remaining
+            } else if (originalPlaylist.isNotEmpty()) {
+                this.playlist = originalPlaylist.shuffled()
+            }
+        } else {
+            if (originalPlaylist.isNotEmpty()) {
+                this.playlist = originalPlaylist
+            }
+        }
+        return newMode
+    }
+
+    fun playShuffled(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _isShuffleMode.value = true
+        originalPlaylist = tracks
+        val shuffled = tracks.shuffled()
+        this.playlist = shuffled
+        playTrack(shuffled.first(), shuffled, forceRestart = true)
+    }
+
     fun hasNext(): Boolean = _queue.value.isNotEmpty() || playlist.isNotEmpty()
     fun hasPrevious(): Boolean = playlist.isNotEmpty()
 
@@ -662,6 +722,8 @@ class PlayerController(
     fun clearState() {
         playJob?.cancel()
         stopPositionUpdates(saveCurrentPlayerPosition = false)
+        _isShuffleMode.value = false
+        originalPlaylist = emptyList()
         _currentTrack.value = null
         _currentPositionMs.value = 0L
         _durationMs.value = 0L

@@ -76,6 +76,12 @@ fun LibraryScreen(
     onSelectPlaylist: (Playlist) -> Unit = {},
     onPlayPlaylist: (Playlist) -> Unit = {},
     onTrackSelect: (Track, List<Track>) -> Unit,
+    onShuffleSelect: (List<Track>) -> Unit = { tracks ->
+        if (tracks.isNotEmpty()) {
+            val shuffled = tracks.shuffled()
+            onTrackSelect(shuffled.first(), shuffled)
+        }
+    },
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -545,8 +551,9 @@ fun LibraryScreen(
 
                                     OutlinedButton(
                                         onClick = {
-                                            val shuffled = favorites.shuffled()
-                                            onTrackSelect(shuffled.first(), shuffled)
+                                            if (favorites.isNotEmpty()) {
+                                                onShuffleSelect(favorites)
+                                            }
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = Color(0xFF14141C).copy(alpha = 0.65f),
@@ -627,8 +634,9 @@ fun LibraryScreen(
 
                                     OutlinedButton(
                                         onClick = {
-                                            val shuffled = downloads.shuffled()
-                                            onTrackSelect(shuffled.first(), shuffled)
+                                            if (downloads.isNotEmpty()) {
+                                                onShuffleSelect(downloads)
+                                            }
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = Color(0xFF14141C).copy(alpha = 0.65f),

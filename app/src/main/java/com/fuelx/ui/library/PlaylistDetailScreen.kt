@@ -43,6 +43,12 @@ fun PlaylistDetailScreen(
     onBackClick: () -> Unit,
     onAddToQueue: (Track) -> Unit = {},
     onAddToPlaylist: (Track) -> Unit = {},
+    onShufflePlaylist: (List<Track>) -> Unit = { tracks ->
+        if (tracks.isNotEmpty()) {
+            val shuffled = tracks.shuffled()
+            onPlayTrack(shuffled.first(), shuffled)
+        }
+    },
     modifier: Modifier = Modifier
 ) {
     var showDeletePlaylistDialog by remember { mutableStateOf(false) }
@@ -301,43 +307,55 @@ fun PlaylistDetailScreen(
                         if (playlist.tracks.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(18.dp))
 
+                            val buttonGlassBorder = Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.22f),
+                                    Color.White.copy(alpha = 0.06f)
+                                )
+                            )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Button(
+                                OutlinedButton(
                                     onClick = {
                                         onPlayTrack(playlist.tracks.first(), playlist.tracks)
                                     },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = AccentPrimary,
-                                        contentColor = FuelXColors.OnAccent
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color(0xFF14141C).copy(alpha = 0.70f),
+                                        contentColor = TextPrimary
                                     ),
+                                    border = BorderStroke(1.dp, buttonGlassBorder),
                                     shape = RoundedCornerShape(24.dp),
-                                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
+                                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
                                         contentDescription = "Play All",
-                                        tint = FuelXColors.OnAccent,
+                                        tint = AccentPrimary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Play All", fontWeight = FontWeight.Bold)
+                                    Text("Play All", color = TextPrimary, fontWeight = FontWeight.Bold)
                                 }
 
                                 Spacer(modifier = Modifier.width(12.dp))
 
                                 OutlinedButton(
                                     onClick = {
-                                        val shuffled = playlist.tracks.shuffled()
-                                        onPlayTrack(shuffled.first(), shuffled)
+                                        if (playlist.tracks.isNotEmpty()) {
+                                            onShufflePlaylist(playlist.tracks)
+                                        }
                                     },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color(0xFF14141C).copy(alpha = 0.70f),
+                                        contentColor = TextPrimary
+                                    ),
+                                    border = BorderStroke(1.dp, buttonGlassBorder),
                                     shape = RoundedCornerShape(24.dp),
-                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+                                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Shuffle,
@@ -346,7 +364,7 @@ fun PlaylistDetailScreen(
                                         tint = TextPrimary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Shuffle", fontWeight = FontWeight.Medium)
+                                    Text("Shuffle", color = TextPrimary, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }

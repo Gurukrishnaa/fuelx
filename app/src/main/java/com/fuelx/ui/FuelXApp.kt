@@ -119,6 +119,7 @@ fun FuelXApp() {
     val playbackError by playerController.playbackError.collectAsState()
     val queue by playerController.queue.collectAsState()
     val isRepeatMode by playerController.isRepeatMode.collectAsState()
+    val isShuffleMode by playerController.isShuffleMode.collectAsState()
 
     var isNowPlayingOpen by remember { mutableStateOf(false) }
 
@@ -358,6 +359,10 @@ fun FuelXApp() {
                                     playerController.playTrack(track, list)
                                     isNowPlayingOpen = true
                                 },
+                                onShufflePlaylist = { list ->
+                                    playerController.playShuffled(list)
+                                    isNowPlayingOpen = true
+                                },
                                 onRemoveTrack = { trackId ->
                                     coroutineScope.launch {
                                         libraryRepository.removeTrackFromPlaylist(selectedPlaylist.id, trackId)
@@ -464,6 +469,10 @@ fun FuelXApp() {
                                     playerController.playTrack(track, list)
                                     isNowPlayingOpen = true
                                 },
+                                onShuffleSelect = { list ->
+                                    playerController.playShuffled(list)
+                                    isNowPlayingOpen = true
+                                },
                                 onBackClick = { selectedTab = ScreenTab.HOME }
                             )
                         }
@@ -525,8 +534,19 @@ fun FuelXApp() {
                 onRetryPlayback = { playerController.retryPlayback() },
                 isFavorite = favorites.any { it.id == currentTrack?.id },
                 isRepeat = isRepeatMode,
+                isShuffle = isShuffleMode,
                 onToggleFavorite = {
                     currentTrack?.let { onToggleFavorite(it) }
+                },
+                onToggleShuffle = {
+                    val enabled = playerController.toggleShuffleMode()
+                    coroutineScope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(
+                            message = if (enabled) "Shuffle mode on" else "Shuffle mode off",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
                 },
                 onToggleRepeat = {
                     val enabled = playerController.toggleRepeatMode()
