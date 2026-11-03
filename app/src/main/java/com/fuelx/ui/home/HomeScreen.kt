@@ -5,9 +5,11 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -366,6 +368,8 @@ fun HomeScreen(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
                                 isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, recentlyPlayed) }
                             )
                         }
@@ -396,6 +400,8 @@ fun HomeScreen(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
                                 isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, shelves.pickedForYou) }
                             )
                         }
@@ -425,6 +431,8 @@ fun HomeScreen(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
                                 isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, shelves.becauseTracks) }
                             )
                         }
@@ -455,6 +463,8 @@ fun HomeScreen(
                                 track = track,
                                 isSelected = track.id == currentTrack?.id,
                                 isPlaying = track.id == currentTrack?.id && isPlaying,
+                                onAddToQueue = { onAddToQueue(track) },
+                                onAddToPlaylist = { onAddToPlaylist(track) },
                                 onClick = { onTrackSelect(track, shelves.discover) }
                             )
                         }
@@ -905,13 +915,17 @@ private fun FrostedFilterChip(
 /**
  * Frosted Glass Card for Recently Listened items with sound wave indicator.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentTrackCard(
     track: Track,
     isSelected: Boolean,
     isPlaying: Boolean,
+    onAddToQueue: () -> Unit = {},
+    onAddToPlaylist: () -> Unit = {},
     onClick: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val cleanArtist = remember(track.artist) {
         cleanArtistString(track.artist).ifBlank { "Unknown Artist" }
     }
@@ -953,7 +967,10 @@ private fun RecentTrackCard(
             .clip(cardShape)
             .background(cardBg)
             .border(borderStroke, cardShape)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { showMenu = true }
+            )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Box(
@@ -988,6 +1005,69 @@ private fun RecentTrackCard(
                 color = TextSecondary.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            containerColor = Color(0xFF131520).copy(alpha = 0.85f),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+            shadowElevation = 12.dp,
+            modifier = Modifier
+                .width(200.dp)
+                .clip(RoundedCornerShape(20.dp))
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Add to Queue",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = null,
+                        tint = AccentPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showMenu = false
+                    onAddToQueue()
+                }
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "Add to Playlist",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        contentDescription = null,
+                        tint = AccentPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showMenu = false
+                    onAddToPlaylist()
+                }
             )
         }
     }
